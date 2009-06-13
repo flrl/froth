@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "forth.h"
+#include "builtin.h"
 
 #define F_IMMED     0x80
 #define F_HIDDEN    0x20
@@ -11,25 +12,29 @@
 #define DECLARE_PRIMITIVE(P)    void P (void *pfa)
 
 // Define a primitive and add it to the dictionary
-#define PRIMITIVE(NAME, NAME_LEN, FLAGS, CNAME, LINK)                               \
-    DECLARE_PRIMITIVE(CNAME);                                                       \
-    DictEntry _dict_##CNAME = { &_dict_##LINK, FLAGS | NAME_LEN, NAME, CNAME, };    \
+#define PRIMITIVE(NAME, FLAGS, CNAME, LINK)                                 \
+    DECLARE_PRIMITIVE(CNAME);                                               \
+    DictEntry _dict_##CNAME =                                               \
+        { &_dict_##LINK, ((FLAGS) | (sizeof(NAME) - 1)), NAME, CNAME, };    \
     DECLARE_PRIMITIVE(CNAME)
 
-// Define a variable and add it to the dictionar; also create a pointer for direct access
-#define VARIABLE(NAME, NAME_LEN, INITIAL, LINK)                                             \
-    DictEntry _dict_var_##NAME = { &_dict_##LINK, NAME_LEN, #NAME, do_variable, {INITIAL}}; \
+// Define a variable and add it to the dictionary; also create a pointer for direct access
+#define VARIABLE(NAME, INITIAL, LINK)                                           \
+    DictEntry _dict_var_##NAME =                                                \
+        { &_dict_##LINK, sizeof(#NAME) - 1, #NAME, do_variable, {INITIAL} };    \
     cell * const var_##NAME = &_dict_var_##NAME.param[0]
 
 // Define a constant and add it to the dictionary
-#define CONSTANT(NAME, NAME_LEN, VALUE, LINK) \
-    DictEntry _dict_const_##NAME = { &_dict_##LINK, NAME_LEN, #NAME, do_constant, { VALUE }}
+#define CONSTANT(NAME, VALUE, LINK)                                             \
+    DictEntry _dict_const_##NAME =                                              \
+        { &_dict_##LINK, sizeof(#NAME) - 1, #NAME, do_constant, { VALUE } };    \
+    const cell * const const_##NAME = &_dict_const_##NAME.param[0]
 
-// Shorthand macros to make repetitive code less hassle
-#define REG(__x)        register cell __x
-#define PTOP(__x)       __x = stack_top(&parameter_stack)
-#define PPOP(__x)       __x = stack_pop(&parameter_stack)
-#define PPUSH(__x)      stack_push(&parameter_stack, (__x))
+// Shorthand macros to make repetitive code more writeable
+#define REG(X)        register cell X
+#define PTOP(X)       X = stack_top(&parameter_stack)
+#define PPOP(X)       X = stack_pop(&parameter_stack)
+#define PPUSH(X)      stack_push(&parameter_stack, (X))
 
 
 
@@ -37,10 +42,6 @@
 
 // FIXME do i want these all to take a void* argument, or should they just use a global register
 // W to read the pfa from?
-
-// I think they need a pointer for where they're coming from, so that eg LIT can read the next
-// code word... but I need to think about this some more cause maybe i already have this info.
-
 
 // all primitives are called with a parameter, which is a pointer to the parameter field
 // of the word definition they're called from.
@@ -149,17 +150,17 @@ DictEntry _dict_DICT_ROOT = {
   Exception: LATEST should be declared very last (see end of file)
     VARIABLE(NAME, NAME_LEN, INITIAL, LINK)
 ***************************************************************************/
-VARIABLE (STATE, 5, 0, DICT_ROOT);    // FIXME idk
-VARIABLE (BASE, 4, 0, var_STATE);  // FIXME idk
+VARIABLE (STATE, 0, DICT_ROOT);    // FIXME idk
+VARIABLE (BASE,  0, var_STATE);  // FIXME idk
 
 
 /***************************************************************************
   Builtin constants -- keep these together
     CONSTANT(NAME, NAME_LEN, VALUE, LINK)
  ***************************************************************************/
-CONSTANT (VERSION, 7, 0, var_BASE);
-CONSTANT (DOCOL, 5, (cell) &do_colon, const_VERSION);
-CONSTANT (SHEEP, 5, 0xDEADBEEF, const_DOCOL);
+CONSTANT (VERSION, 0, var_BASE);
+CONSTANT (DOCOL, (cell) &do_colon, const_VERSION);
+CONSTANT (SHEEP, 0xDEADBEEF, const_DOCOL);
 
 
 /***************************************************************************
@@ -168,14 +169,14 @@ CONSTANT (SHEEP, 5, 0xDEADBEEF, const_DOCOL);
  ***************************************************************************/
 
 // ( a -- )
-PRIMITIVE ("DROP", 4, 0, _DROP, const_DOCOL) {
+PRIMITIVE ("DROP", 0, _DROP, const_DOCOL) {
     REG(a);
     PPOP(a);
 }
 
 
 // ( b a -- a b )
-PRIMITIVE ("SWAP", 4, 0, _SWAP, _DROP) {
+PRIMITIVE ("SWAP", 0, _SWAP, _DROP) {
     REG(a);
     REG(b);
 
@@ -187,7 +188,7 @@ PRIMITIVE ("SWAP", 4, 0, _SWAP, _DROP) {
 
 
 // ( a - a a )
-PRIMITIVE ("DUP", 3, 0, _DUP, _SWAP) {
+PRIMITIVE ("DUP", 0, _DUP, _SWAP) {
     REG(a);
     
     PTOP(a);
@@ -196,7 +197,7 @@ PRIMITIVE ("DUP", 3, 0, _DUP, _SWAP) {
 
 
 // ( b a -- a b )
-PRIMITIVE ("OVER", 4, 0, _OVER, _DUP) {
+PRIMITIVE ("OVER", 0, _OVER, _DUP) {
     REG(a);
     REG(b);
 
@@ -208,7 +209,7 @@ PRIMITIVE ("OVER", 4, 0, _OVER, _DUP) {
 
 
 // ( c b a -- a c b )
-PRIMITIVE ("ROT", 3, 0, _ROT, _OVER) {
+PRIMITIVE ("ROT", 0, _ROT, _OVER) {
     REG(a);
     REG(b);
     REG(c);
@@ -223,7 +224,7 @@ PRIMITIVE ("ROT", 3, 0, _ROT, _OVER) {
 
 
 // ( c b a -- b a c )
-PRIMITIVE ("-ROT", 4, 0, _negROT, _ROT) {
+PRIMITIVE ("-ROT", 0, _negROT, _ROT) {
     REG(a);
     REG(b);
     REG(c);
@@ -238,7 +239,7 @@ PRIMITIVE ("-ROT", 4, 0, _negROT, _ROT) {
 
 
 // ( b a -- )
-PRIMITIVE ("2DROP", 5, 0, _2DROP, _negROT) {
+PRIMITIVE ("2DROP", 0, _2DROP, _negROT) {
     REG(a);
     PPOP(a);
     PPOP(a);
@@ -246,7 +247,7 @@ PRIMITIVE ("2DROP", 5, 0, _2DROP, _negROT) {
 
 
 // ( b a -- b a b a )
-PRIMITIVE ("2DUP", 4, 0, _2DUP, _2DROP) {
+PRIMITIVE ("2DUP", 0, _2DUP, _2DROP) {
     REG(a);
     REG(b);
 
@@ -259,7 +260,7 @@ PRIMITIVE ("2DUP", 4, 0, _2DUP, _2DROP) {
 
 
 // ( d c b a -- b a d c ) 
-PRIMITIVE ("2SWAP", 5, 0, _2SWAP, _2DUP) {
+PRIMITIVE ("2SWAP", 0, _2SWAP, _2DUP) {
     REG(a);
     REG(b);
     REG(c);
@@ -278,7 +279,7 @@ PRIMITIVE ("2SWAP", 5, 0, _2SWAP, _2DUP) {
 
 
 // ( a -- a ) or ( a -- a a )
-PRIMITIVE ("?DUP", 4, 0, _qDUP, _2SWAP) {
+PRIMITIVE ("?DUP", 0, _qDUP, _2SWAP) {
     REG(a);
 
     PTOP(a);
@@ -287,7 +288,7 @@ PRIMITIVE ("?DUP", 4, 0, _qDUP, _2SWAP) {
 
 
 // ( a -- a+1 )
-PRIMITIVE ("1+", 2, 0, _1plus, _qDUP) {
+PRIMITIVE ("1+", 0, _1plus, _qDUP) {
     REG(a);
 
     PPOP(a);
@@ -296,7 +297,7 @@ PRIMITIVE ("1+", 2, 0, _1plus, _qDUP) {
 
 
 // ( a -- a-1 )
-PRIMITIVE ("1-", 2, 0, _1minus, _1plus) {
+PRIMITIVE ("1-", 0, _1minus, _1plus) {
     REG(a);
     
     PPOP(a);
@@ -305,7 +306,7 @@ PRIMITIVE ("1-", 2, 0, _1minus, _1plus) {
 
 
 // ( a -- a+4 )
-PRIMITIVE ("4+", 2, 0, _4plus, _1minus) {
+PRIMITIVE ("4+", 0, _4plus, _1minus) {
     REG(a);
 
     PPOP(a);
@@ -314,7 +315,7 @@ PRIMITIVE ("4+", 2, 0, _4plus, _1minus) {
 
 
 // ( a -- a-4 )
-PRIMITIVE ("4-", 2, 0, _4minus, _4plus) {
+PRIMITIVE ("4-", 0, _4minus, _4plus) {
     REG(a);
 
     PPOP(a);
@@ -323,7 +324,7 @@ PRIMITIVE ("4-", 2, 0, _4minus, _4plus) {
 
 
 // ( b a -- a+b )
-PRIMITIVE ("+", 1, 0, _plus, _4minus) {
+PRIMITIVE ("+", 0, _plus, _4minus) {
     REG(a);
     REG(b);
 
@@ -334,7 +335,7 @@ PRIMITIVE ("+", 1, 0, _plus, _4minus) {
 
 
 // ( b a -- b - a )
-PRIMITIVE ("-", 1, 0, _minus, _plus) {
+PRIMITIVE ("-", 0, _minus, _plus) {
     REG(a);
     REG(b);
 
@@ -345,7 +346,7 @@ PRIMITIVE ("-", 1, 0, _minus, _plus) {
 
 
 // ( b a -- a * b )
-PRIMITIVE ("*", 1, 0, _multiply, _minus) {
+PRIMITIVE ("*", 0, _multiply, _minus) {
     REG(a);
     REG(b);
 
@@ -356,7 +357,7 @@ PRIMITIVE ("*", 1, 0, _multiply, _minus) {
 
 
 // ( b a -- b / a)
-PRIMITIVE ("/", 1, 0, _divide, _multiply) {
+PRIMITIVE ("/", 0, _divide, _multiply) {
     REG(a);
     REG(b);
 
@@ -367,7 +368,7 @@ PRIMITIVE ("/", 1, 0, _divide, _multiply) {
 
 
 // ( b a -- b % a)
-PRIMITIVE ("MOD", 3, 0, _modulus, _divide) {
+PRIMITIVE ("MOD", 0, _modulus, _divide) {
     REG(a);
     REG(b);
 
@@ -378,7 +379,7 @@ PRIMITIVE ("MOD", 3, 0, _modulus, _divide) {
 
 
 // ( b a -- a == b )
-PRIMITIVE ("=", 1, 0, _equals, _modulus) {
+PRIMITIVE ("=", 0, _equals, _modulus) {
     REG(a);
     REG(b);
 
@@ -389,7 +390,7 @@ PRIMITIVE ("=", 1, 0, _equals, _modulus) {
 
 
 // ( b a -- a != b )
-PRIMITIVE ("<>", 2, 0, _notequals, _equals) {
+PRIMITIVE ("<>", 0, _notequals, _equals) {
     REG(a);
     REG(b);
 
@@ -400,7 +401,7 @@ PRIMITIVE ("<>", 2, 0, _notequals, _equals) {
 
 
 // ( b a -- b < a )
-PRIMITIVE ("<", 1, 0, _lt, _notequals) {
+PRIMITIVE ("<", 0, _lt, _notequals) {
     REG(a);
     REG(b);
 
@@ -411,7 +412,7 @@ PRIMITIVE ("<", 1, 0, _lt, _notequals) {
 
 
 // ( b a -- b > a )
-PRIMITIVE (">", 1, 0, _gt, _lt) {
+PRIMITIVE (">", 0, _gt, _lt) {
     REG(a);
     REG(b);
 
@@ -422,7 +423,7 @@ PRIMITIVE (">", 1, 0, _gt, _lt) {
 
 
 // ( b a -- b <= a )
-PRIMITIVE ("<=", 2, 0, _lte, _gt) {
+PRIMITIVE ("<=", 0, _lte, _gt) {
     REG(a);
     REG(b);
 
@@ -433,7 +434,7 @@ PRIMITIVE ("<=", 2, 0, _lte, _gt) {
 
 
 // ( b a -- b >= a )
-PRIMITIVE (">=", 2, 0, _gte, _lte) {
+PRIMITIVE (">=", 0, _gte, _lte) {
     REG(a);
     REG(b);
 
@@ -444,7 +445,7 @@ PRIMITIVE (">=", 2, 0, _gte, _lte) {
 
 
 // ( a -- a == 0 )
-PRIMITIVE ("0=", 2, 0, _zero_equals, _gte) {
+PRIMITIVE ("0=", 0, _zero_equals, _gte) {
     REG(a);
 
     PPOP(a);
@@ -453,7 +454,7 @@ PRIMITIVE ("0=", 2, 0, _zero_equals, _gte) {
 
 
 // ( a -- a != 0 )
-PRIMITIVE ("0<>", 3, 0, _notzero_equals, _zero_equals) {
+PRIMITIVE ("0<>", 0, _notzero_equals, _zero_equals) {
     REG(a);
 
     PPOP(a);
@@ -462,7 +463,7 @@ PRIMITIVE ("0<>", 3, 0, _notzero_equals, _zero_equals) {
 
 
 // ( a -- a < 0 )
-PRIMITIVE ("0<", 2, 0, _zero_lt, _notzero_equals) {
+PRIMITIVE ("0<", 0, _zero_lt, _notzero_equals) {
     REG(a);
 
     PPOP(a);
@@ -471,7 +472,7 @@ PRIMITIVE ("0<", 2, 0, _zero_lt, _notzero_equals) {
 
 
 // ( a -- a > 0 )
-PRIMITIVE ("0>", 2, 0, _zero_gt, _zero_lt) {
+PRIMITIVE ("0>", 0, _zero_gt, _zero_lt) {
     REG(a);
 
     PPOP(a);
@@ -480,7 +481,7 @@ PRIMITIVE ("0>", 2, 0, _zero_gt, _zero_lt) {
 
 
 // ( a -- a <= 0 )
-PRIMITIVE ("0<=", 3, 0, _zero_lte, _zero_gt) {
+PRIMITIVE ("0<=", 0, _zero_lte, _zero_gt) {
     REG(a);
 
     PPOP(a);
@@ -489,7 +490,7 @@ PRIMITIVE ("0<=", 3, 0, _zero_lte, _zero_gt) {
 
 
 // ( a -- a >= 0 )
-PRIMITIVE ("0>=", 3, 0, _zero_gte, _zero_lte) {
+PRIMITIVE ("0>=", 0, _zero_gte, _zero_lte) {
     REG(a);
 
     PPOP(a);
@@ -498,7 +499,7 @@ PRIMITIVE ("0>=", 3, 0, _zero_gte, _zero_lte) {
 
 
 // ( b a -- a & b )
-PRIMITIVE ("AND", 3, 0, _AND, _zero_gte) {
+PRIMITIVE ("AND", 0, _AND, _zero_gte) {
     REG(a);
     REG(b);
 
@@ -509,7 +510,7 @@ PRIMITIVE ("AND", 3, 0, _AND, _zero_gte) {
 
 
 // ( b a -- a | b )
-PRIMITIVE ("OR", 2, 0, _OR, _AND) {
+PRIMITIVE ("OR", 0, _OR, _AND) {
     REG(a);
     REG(b);
 
@@ -520,7 +521,7 @@ PRIMITIVE ("OR", 2, 0, _OR, _AND) {
 
 
 // ( b a -- a ^ b )
-PRIMITIVE ("XOR", 3, 0, _XOR, _OR) {
+PRIMITIVE ("XOR", 0, _XOR, _OR) {
     REG(a);
     REG(b);
 
@@ -531,7 +532,7 @@ PRIMITIVE ("XOR", 3, 0, _XOR, _OR) {
 
 
 // ( a -- ~a )
-PRIMITIVE ("INVERT", 6, 0, _INVERT, _XOR) {
+PRIMITIVE ("INVERT", 0, _INVERT, _XOR) {
     REG(a);
 
     PPOP(a);
@@ -542,7 +543,7 @@ PRIMITIVE ("INVERT", 6, 0, _INVERT, _XOR) {
 /* Memory access primitives */
 
 // ( value addr -- )
-PRIMITIVE ("!", 1, 0, _store, _INVERT) {
+PRIMITIVE ("!", 0, _store, _INVERT) {
     REG(a);
     REG(b);
 
@@ -554,7 +555,7 @@ PRIMITIVE ("!", 1, 0, _store, _INVERT) {
 
 
 // ( addr -- value )
-PRIMITIVE ("@", 1, 0, _fetch, _store) {
+PRIMITIVE ("@", 0, _fetch, _store) {
     REG(a);
     REG(b);
 
@@ -565,7 +566,7 @@ PRIMITIVE ("@", 1, 0, _fetch, _store) {
 
 
 // ( delta addr -- )
-PRIMITIVE ("+!", 2, 0, _addstore, _fetch) {
+PRIMITIVE ("+!", 0, _addstore, _fetch) {
     REG(a);
     REG(b);
 
@@ -576,7 +577,7 @@ PRIMITIVE ("+!", 2, 0, _addstore, _fetch) {
 
 
 // ( delta addr -- )
-PRIMITIVE ("-!", 2, 0, _substore, _addstore) {
+PRIMITIVE ("-!", 0, _substore, _addstore) {
     REG(a);
     REG(b);
 
@@ -587,7 +588,7 @@ PRIMITIVE ("-!", 2, 0, _substore, _addstore) {
 
 
 // ( value addr -- )
-PRIMITIVE ("C!", 2, 0, _storebyte, _substore) {
+PRIMITIVE ("C!", 0, _storebyte, _substore) {
     REG(a);
     REG(b);
 
@@ -598,7 +599,7 @@ PRIMITIVE ("C!", 2, 0, _storebyte, _substore) {
 
 
 // ( addr -- value )
-PRIMITIVE ("C@", 2, 0, _fetchbyte, _storebyte) {
+PRIMITIVE ("C@", 0, _fetchbyte, _storebyte) {
     REG(a);
     REG(b);
 
@@ -609,19 +610,19 @@ PRIMITIVE ("C@", 2, 0, _fetchbyte, _storebyte) {
 
 
 // ( FIXME )
-PRIMITIVE ("C@C!", 4, 0, _ccopy, _fetchbyte) {
+PRIMITIVE ("C@C!", 0, _ccopy, _fetchbyte) {
     // FIXME wtf
 }
 
 
 // ( FIXME )
-PRIMITIVE ("CMOVE", 5, 0, _cmove, _ccopy) {
+PRIMITIVE ("CMOVE", 0, _cmove, _ccopy) {
     // FIXME wtf
 }
 
 
 // ( -- char )
-PRIMITIVE ("KEY", 3, 0, _KEY, _cmove) {
+PRIMITIVE ("KEY", 0, _KEY, _cmove) {
     REG(a);
 
     a = fgetc(stdin);
@@ -630,7 +631,7 @@ PRIMITIVE ("KEY", 3, 0, _KEY, _cmove) {
 
 
 // ( char -- )
-PRIMITIVE ("EMIT", 4, 0, _EMIT, _KEY) {
+PRIMITIVE ("EMIT", 0, _EMIT, _KEY) {
     REG(a);
 
     PPOP(a);
@@ -639,7 +640,7 @@ PRIMITIVE ("EMIT", 4, 0, _EMIT, _KEY) {
 
 
 // ( -- addr len )
-PRIMITIVE ("WORD", 4, 0, _WORD, _EMIT) {
+PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
     static char buf[32];
     REG(a);
     REG(b);
@@ -675,7 +676,7 @@ PRIMITIVE ("WORD", 4, 0, _WORD, _EMIT) {
 }
 
 // ( addr len -- value remainder )
-PRIMITIVE ("NUMBER", 6, 0, _NUMBER, _WORD) {
+PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     char buf[MAX_WORD_LEN + 1];
     char *endptr;
     REG(a);
@@ -696,7 +697,7 @@ PRIMITIVE ("NUMBER", 6, 0, _NUMBER, _WORD) {
 }
 
 // ( addr len -- addr )
-PRIMITIVE ("FIND", 4, 0, _FIND, _NUMBER) {
+PRIMITIVE ("FIND", 0, _FIND, _NUMBER) {
     char *word;
     size_t len;
     REG(a);
@@ -722,7 +723,7 @@ PRIMITIVE ("FIND", 4, 0, _FIND, _NUMBER) {
 }
 
 // ( addr -- cfa )
-PRIMITIVE (">CFA", 4, 0, _TCFA, _FIND) {
+PRIMITIVE (">CFA", 0, _TCFA, _FIND) {
 /*
 struct _dict_entry  *link;
 uint8_t             name_length; 
@@ -736,7 +737,7 @@ pvf                 code;
 }
 
 // ( addr -- dfa )
-PRIMITIVE (">DFA", 4, 0, _TDFA, _TCFA) {
+PRIMITIVE (">DFA", 0, _TDFA, _TCFA) {
     REG(a);
 
     PPOP(a);
@@ -744,7 +745,7 @@ PRIMITIVE (">DFA", 4, 0, _TDFA, _TCFA) {
 }
 
 // ( FIXME )
-PRIMITIVE ("CREATE", 6, 0, _CREATE, _TDFA) {
+PRIMITIVE ("CREATE", 0, _CREATE, _TDFA) {
     // FIXME
 }
 
@@ -760,4 +761,4 @@ PRIMITIVE ("CREATE", 6, 0, _CREATE, _TDFA) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, 6, (cell) &_dict_var_LATEST, _CREATE);  // FIXME keep this updated!
+VARIABLE (LATEST, (cell) &_dict_var_LATEST, _CREATE);  // FIXME keep this updated!
