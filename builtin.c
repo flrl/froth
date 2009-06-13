@@ -2,11 +2,6 @@
 #include <stdlib.h>
 
 #include "forth.h"
-#include "builtin.h"
-
-#define F_IMMED     0x80
-#define F_HIDDEN    0x20
-#define F_LENMASK   0x1F
 
 // Function signature for a primitive
 #define DECLARE_PRIMITIVE(P)    void P (void *pfa)
@@ -30,7 +25,7 @@
         { &_dict_##LINK, sizeof(#NAME) - 1, #NAME, do_constant, { VALUE } };    \
     const cell * const const_##NAME = &_dict_const_##NAME.param[0]
 
-// Shorthand macros to make repetitive code more writeable
+// Shorthand macros to make repetitive code more writeable, but possibly less readable
 #define REG(X)        register cell X
 #define PTOP(X)       X = stack_top(&parameter_stack)
 #define PPOP(X)       X = stack_pop(&parameter_stack)
@@ -135,9 +130,9 @@ void do_variable(void *pfa) {
 
 
 /***************************************************************************
-    The DICT_ROOT DictEntry delimits the root of the dictionary
+    The __ROOT DictEntry delimits the root of the dictionary
  ***************************************************************************/
-DictEntry _dict_DICT_ROOT = {
+DictEntry _dict___ROOT = {
     NULL,   // link
     0,      // name length + flags
     "",     // name
@@ -148,28 +143,31 @@ DictEntry _dict_DICT_ROOT = {
 /***************************************************************************
   Builtin variables -- keep these together
   Exception: LATEST should be declared very last (see end of file)
-    VARIABLE(NAME, NAME_LEN, INITIAL, LINK)
+    VARIABLE(NAME, INITIAL, LINK)
 ***************************************************************************/
-VARIABLE (STATE, 0, DICT_ROOT);    // FIXME idk
+VARIABLE (STATE, 0, __ROOT);    // FIXME idk
 VARIABLE (BASE,  0, var_STATE);  // FIXME idk
 
 
 /***************************************************************************
   Builtin constants -- keep these together
-    CONSTANT(NAME, NAME_LEN, VALUE, LINK)
+    CONSTANT(NAME, VALUE, LINK)
  ***************************************************************************/
 CONSTANT (VERSION, 0, var_BASE);
 CONSTANT (DOCOL, (cell) &do_colon, const_VERSION);
-CONSTANT (SHEEP, 0xDEADBEEF, const_DOCOL);
+CONSTANT (F_IMMED, F_IMMED, const_DOCOL);
+CONSTANT (F_HIDDEN, F_HIDDEN, const_F_IMMED);
+CONSTANT (F_LENMASK, F_LENMASK, const_F_HIDDEN);
+CONSTANT (SHEEP, 0xDEADBEEF, const_F_LENMASK);
 
 
 /***************************************************************************
   Builtin code words -- keep these together
-    PRIMITIVE(NAME, NAME_LEN, FLAGS, CNAME, LINK)
+    PRIMITIVE(NAME, FLAGS, CNAME, LINK)
  ***************************************************************************/
 
 // ( a -- )
-PRIMITIVE ("DROP", 0, _DROP, const_DOCOL) {
+PRIMITIVE ("DROP", 0, _DROP, const_F_LENMASK) {
     REG(a);
     PPOP(a);
 }
@@ -675,6 +673,7 @@ PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
 
 }
 
+
 // ( addr len -- value remainder )
 PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     char buf[MAX_WORD_LEN + 1];
@@ -696,6 +695,7 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     PPUSH(b);
 }
 
+
 // ( addr len -- addr )
 PRIMITIVE ("FIND", 0, _FIND, _NUMBER) {
     char *word;
@@ -709,7 +709,7 @@ PRIMITIVE ("FIND", 0, _FIND, _NUMBER) {
     DictEntry *de = (DictEntry *) *var_LATEST;
     DictEntry *result = NULL;
 
-    while (de != &_dict_DICT_ROOT) {
+    while (de != &_dict___ROOT) {
         if (len == (de->name_length & (F_HIDDEN | F_LENMASK))) { // tricky - ignores hidden words
             if (strncmp(word, de->name, len) == 0) {
                 // found a match
@@ -721,6 +721,7 @@ PRIMITIVE ("FIND", 0, _FIND, _NUMBER) {
 
     PPUSH((cell) result);
 }
+
 
 // ( addr -- cfa )
 PRIMITIVE (">CFA", 0, _TCFA, _FIND) {
@@ -736,6 +737,7 @@ pvf                 code;
     PPUSH(a + sizeof(DictEntry*) + sizeof(uint8_t) + MAX_WORD_LEN);
 }
 
+
 // ( addr -- dfa )
 PRIMITIVE (">DFA", 0, _TDFA, _TCFA) {
     REG(a);
@@ -744,10 +746,12 @@ PRIMITIVE (">DFA", 0, _TDFA, _TCFA) {
     PPUSH(a + sizeof(DictEntry*) + sizeof(uint8_t) + MAX_WORD_LEN + sizeof(pvf));
 }
 
+
 // ( FIXME )
 PRIMITIVE ("CREATE", 0, _CREATE, _TDFA) {
     // FIXME
 }
+
 
 // FIXME other stuff
 

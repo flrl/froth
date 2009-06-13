@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "stack.h"
+#include "builtin.h"
 
 typedef void (*pvf)();
 
@@ -17,8 +18,12 @@ typedef struct _dict_entry {
     cell        param[];
 } DictEntry;
 
-/* Pre-declare this so the builtins can use it */
-extern cell * const var_LATEST;
+enum {
+    F_IMMED = 0x80,
+    F_HIDDEN = 0x20,
+    F_LENMASK = 0x1F,
+};
+
 
 
 extern Stack    parameter_stack;
