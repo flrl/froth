@@ -19,7 +19,7 @@
         { &_dict_##LINK, sizeof(#NAME) - 1, #NAME, do_variable, {INITIAL} };    \
     cell * const var_##NAME = &_dict_var_##NAME.param[0]
 
-// Define a constant and add it to the dictionary
+// Define a constant and add it to the dictionary; also create a pointer for direct access
 #define CONSTANT(NAME, VALUE, LINK)                                             \
     DictEntry _dict_const_##NAME =                                              \
         { &_dict_##LINK, sizeof(#NAME) - 1, #NAME, do_constant, { VALUE } };    \
@@ -146,7 +146,7 @@ DictEntry _dict___ROOT = {
     VARIABLE(NAME, INITIAL, LINK)
 ***************************************************************************/
 VARIABLE (STATE, 0, __ROOT);    // FIXME idk
-VARIABLE (BASE,  0, var_STATE);  // FIXME idk
+VARIABLE (BASE,  10, var_STATE);  // default to decimal
 
 
 /***************************************************************************
@@ -688,8 +688,8 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 
     memcpy(buf, (const char *) b, a);
 
-    a = strtol(buf, &endptr, 0);        // value parsed
-    b = strlen(buf) - (endptr - buf);   // number of chars left unparsed
+    a = strtol(buf, &endptr, *var_BASE);    // value parsed
+    b = strlen(buf) - (endptr - buf);       // number of chars left unparsed
 
     PPUSH(a);
     PPUSH(b);
