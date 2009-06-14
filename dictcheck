@@ -1,0 +1,47 @@
+#!/usr/bin/env perl
+
+use warnings;
+use strict;
+
+my $ROOT = '__ROOT';
+
+my $last = undef;
+my $errors = 0;
+
+while (<>) {
+    my ($current, $link, $desc) = ();
+    if (m/^\s*PRIMITIVE\s*\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*\{/) {
+        (undef, undef, $current, $link) = ($1, $2, $3, $4);
+        $desc = "Primitive($1)";
+    }
+    elsif (m/^\s*VARIABLE\s*\(([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
+        ($current, undef, $link) = ($1, $2, $3);
+        $desc = "Variable($1)";
+        $current = "var_$current";
+    }
+    elsif (m/^\s*CONSTANT\s*\(([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
+        ($current, undef, $link) = ($1, $2, $3);
+        $desc = "Constant($1)";
+        $current = "const_$current";
+    }
+    else {
+        next;
+    }
+    
+    if (not defined $last) {
+        if ($link ne $ROOT) {
+            print "$ARGV warning: expected $ROOT, got $link at $desc, line $.\n";
+            $errors ++;
+        }
+    }
+    elsif ($link ne $last) {
+        print "$ARGV warning: expected $last, got $link at $desc, line $.\n";
+        $errors ++;
+    }
+
+    $last = $current;
+} continue {
+    close ARGV if eof;  # Reset line number $. for each file
+}
+
+exit $errors;

@@ -5,6 +5,7 @@
 
 #include "stack.h"
 #include "builtin.h"
+#include "memory.h"
 
 typedef void (*pvf)();
 

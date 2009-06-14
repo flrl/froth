@@ -4,8 +4,11 @@
 
 void mem_init ();
 void mem_destroy ();
-void mem_allocate (size_t ncells);
-void mem_release (size_t ncells);
+int  mem_shouldgrow ();
+int  mem_grow (size_t ncells);
+int  mem_shrink (size_t ncells);
+cell *mem_get_start ();
+size_t mem_get_ncells ();
 
 
 #endif /* _MEMORY_H */

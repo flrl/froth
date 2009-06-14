@@ -146,24 +146,26 @@ DictEntry _dict___ROOT = {
     VARIABLE(NAME, INITIAL, LINK)
 ***************************************************************************/
 VARIABLE (STATE,    S_INTERPRET,    __ROOT);        // default to interpret 
-VARIABLE (BASE,     10,             var_STATE);     // default to decimal
-VARIABLE (USIZE,    INIT_USIZE,     var_BASE);      // default to 64k*sizeof(cell) ?
-VARIABLE (UINCR,    INIT_UINCR,     var_USIZE);     //
+VARIABLE (BASE,     0,              var_STATE);     // default to smart base
+VARIABLE (UINCR,    INIT_UINCR,     var_BASE);      //
 VARIABLE (UTHRES,   INIT_UTHRES,    var_UINCR);     //
-VARIABLE (U0,       0,              var_UTHRES);    // default to NULL     
-VARIABLE (HERE,     0,              var_U0);        // default to NULL
+VARIABLE (HERE,     0,              var_UTHRES);    // default to NULL
 
 
 /***************************************************************************
   Builtin constants -- keep these together
     CONSTANT(NAME, VALUE, LINK)
  ***************************************************************************/
-CONSTANT (VERSION, 0, var_HERE);
-CONSTANT (DOCOL, (cell) &do_colon, const_VERSION);
-CONSTANT (F_IMMED, F_IMMED, const_DOCOL);
-CONSTANT (F_HIDDEN, F_HIDDEN, const_F_IMMED);
-CONSTANT (F_LENMASK, F_LENMASK, const_F_HIDDEN);
-CONSTANT (SHEEP, 0xDEADBEEF, const_F_LENMASK);
+CONSTANT (VERSION,      0,                      var_HERE);
+CONSTANT (DOCOL,        (cell) &do_colon,       const_VERSION);
+CONSTANT (DOVAR,        (cell) &do_variable,    const_DOCOL);
+CONSTANT (DOCON,        (cell) &do_constant,    const_DOVAR);
+CONSTANT (F_IMMED,      F_IMMED,                const_DOCON);
+CONSTANT (F_HIDDEN,     F_HIDDEN,               const_F_IMMED);
+CONSTANT (F_LENMASK,    F_LENMASK,              const_F_HIDDEN);
+CONSTANT (S_INTERPRET,  S_INTERPRET,            const_F_LENMASK);
+CONSTANT (S_COMPILE,    S_COMPILE,              const_S_INTERPRET);
+CONSTANT (SHEEP,        0xDEADBEEF,             const_F_LENMASK);
 
 
 /***************************************************************************
@@ -172,7 +174,7 @@ CONSTANT (SHEEP, 0xDEADBEEF, const_F_LENMASK);
  ***************************************************************************/
 
 // ( a -- )
-PRIMITIVE ("DROP", 0, _DROP, const_F_LENMASK) {
+PRIMITIVE ("DROP", 0, _DROP, const_S_COMPILE) {
     REG(a);
     PPOP(a);
 }
@@ -545,8 +547,26 @@ PRIMITIVE ("INVERT", 0, _INVERT, _XOR) {
 
 /* Memory access primitives */
 
+// ( -- addr )
+PRIMITIVE ("U0", 0, _U0, _INVERT) {
+    REG(a);
+
+    a = (cell) mem_get_start();
+    PPUSH(a);
+}
+
+
+// ( -- ncells )
+PRIMITIVE ("USIZE", 0, _USIZE, _U0) {
+    REG(a);
+
+    a = mem_get_ncells();
+    PPUSH(a);
+}
+
+
 // ( value addr -- )
-PRIMITIVE ("!", 0, _store, _INVERT) {
+PRIMITIVE ("!", 0, _store, _USIZE) {
     REG(a);
     REG(b);
 
@@ -628,6 +648,7 @@ PRIMITIVE ("CMOVE", 0, _cmove, _ccopy) {
 PRIMITIVE ("KEY", 0, _KEY, _cmove) {
     REG(a);
 
+    /* stdio is line buffered when attached to terminals :) */
     a = fgetc(stdin);
     PPUSH(a);
 }
@@ -729,7 +750,7 @@ PRIMITIVE ("FIND", 0, _FIND, _NUMBER) {
 
 
 // ( addr -- cfa )
-PRIMITIVE (">CFA", 0, _TCFA, _FIND) {
+PRIMITIVE (">CFA", 0, _toCFA, _FIND) {
 /*
 struct _dict_entry  *link;
 uint8_t             name_length; 
@@ -744,7 +765,7 @@ pvf                 code;
 
 
 // ( addr -- dfa )
-PRIMITIVE (">DFA", 0, _TDFA, _TCFA) {
+PRIMITIVE (">DFA", 0, _toDFA, _toCFA) {
     REG(a);
 
     PPOP(a);
@@ -753,7 +774,7 @@ PRIMITIVE (">DFA", 0, _TDFA, _TCFA) {
 
 
 // ( FIXME )
-PRIMITIVE ("CREATE", 0, _CREATE, _TDFA) {
+PRIMITIVE ("CREATE", 0, _CREATE, _toDFA) {
     // FIXME
 }
 
@@ -762,6 +783,31 @@ PRIMITIVE ("CREATE", 0, _CREATE, _TDFA) {
 
 
 
+// ( -- status )
+PRIMITIVE ("UGROW", 0, _UGROW, _CREATE) {
+    REG(a);
+
+    a = mem_grow(*var_UINCR);
+    PPUSH(a);
+}
+
+// ( ncells -- status )
+PRIMITIVE ("UGROWN", 0, _UGROWN, _UGROW) {
+    REG(a);
+
+    PPOP(a);
+    a = mem_grow(a);
+    PPUSH(a);
+}
+
+// ( ncells -- status )
+PRIMITIVE ("USHRINK", 0, _USHRINK, _UGROWN) {
+    REG(a);
+
+    PPOP(a);
+    a = mem_shrink(a);
+    PPUSH(a);
+}
 
 /***************************************************************************
     The LATEST variable denotes the top of the dictionary.  Its initial
@@ -770,4 +816,4 @@ PRIMITIVE ("CREATE", 0, _CREATE, _TDFA) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (cell) &_dict_var_LATEST, _CREATE);  // FIXME keep this updated!
+VARIABLE (LATEST, (cell) &_dict_var_LATEST, _USHRINK);  // FIXME keep this updated!
