@@ -8,7 +8,12 @@
 
 typedef void (*pvf)();
 
-#define MAX_WORD_LEN (31)
+#define MAX_WORD_LEN    (31)
+
+/* Initial memory sizes, in cells */
+#define INIT_USIZE      (4096) 
+#define INIT_UINCR      (1024)
+#define INIT_UTHRES     (1024)
 
 typedef struct _dict_entry {
     struct _dict_entry *link;
@@ -24,12 +29,13 @@ enum {
     F_LENMASK = 0x1F,
 };
 
+enum {
+    S_INTERPRET = 0,
+    S_COMPILE = 1,
+};
 
 
 extern Stack    parameter_stack;
 extern cell     W;
-
-
-
 
 #endif

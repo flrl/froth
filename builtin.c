@@ -145,15 +145,20 @@ DictEntry _dict___ROOT = {
   Exception: LATEST should be declared very last (see end of file)
     VARIABLE(NAME, INITIAL, LINK)
 ***************************************************************************/
-VARIABLE (STATE, 0, __ROOT);    // FIXME idk
-VARIABLE (BASE,  10, var_STATE);  // default to decimal
+VARIABLE (STATE,    S_INTERPRET,    __ROOT);        // default to interpret 
+VARIABLE (BASE,     10,             var_STATE);     // default to decimal
+VARIABLE (USIZE,    INIT_USIZE,     var_BASE);      // default to 64k*sizeof(cell) ?
+VARIABLE (UINCR,    INIT_UINCR,     var_USIZE);     //
+VARIABLE (UTHRES,   INIT_UTHRES,    var_UINCR);     //
+VARIABLE (U0,       0,              var_UTHRES);    // default to NULL     
+VARIABLE (HERE,     0,              var_U0);        // default to NULL
 
 
 /***************************************************************************
   Builtin constants -- keep these together
     CONSTANT(NAME, VALUE, LINK)
  ***************************************************************************/
-CONSTANT (VERSION, 0, var_BASE);
+CONSTANT (VERSION, 0, var_HERE);
 CONSTANT (DOCOL, (cell) &do_colon, const_VERSION);
 CONSTANT (F_IMMED, F_IMMED, const_DOCOL);
 CONSTANT (F_HIDDEN, F_HIDDEN, const_F_IMMED);
