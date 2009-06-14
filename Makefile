@@ -8,7 +8,7 @@ GENS := builtin.h
 CFLAGS += -g -Wall -std=c99
 LDFLAGS :=
 
-.PHONY : all clean depends
+.PHONY : all clean depends realclean
 
 all : $(TARGET)
 
@@ -23,10 +23,10 @@ $(DEPS) : $(GENS)
 clean :
 	$(RM) $(OBJS) $(GENS) $(TARGET) core
 
+depends : $(DEPS)
+
 realclean : clean
 	$(RM) $(DEPS)
-
-depends : $(DEPS)
 
 define DEPEND_template
  $(1).d : $(1).c

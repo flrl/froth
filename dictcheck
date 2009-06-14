@@ -4,6 +4,7 @@ use warnings;
 use strict;
 
 my $ROOT = '__ROOT';
+my $TOP = 'var_LATEST';
 
 my @symbols = ( { name => 'ROOT', cname => $ROOT, 'link' => undef, type => undef } );
 my $errors = 0;
@@ -53,6 +54,23 @@ while (<>) {
 
 } continue {
     close ARGV if eof;  # Reset line number $. for each file
+}
+
+# Make sure LATEST is at the top of the list
+if ($symbols[0]->{cname} ne $TOP) {
+    printf STDERR "%s: warning: Incorrect top of dictionary, expected %s, got %s\n",
+                  $ARGV, $TOP, $symbols[0]->{cname};
+
+    if (scalar @symbols > 1) {
+        print STDERR "$ARGV: note: The following previously-defined symbols ",
+                     "may not be accessible:\n";
+        foreach my $s (@symbols) {
+            last if $s->{cname} eq $TOP or $s->{cname} eq $ROOT;
+            print STDERR "$ARGV: note:    $s->{name} ($s->{type})\n";
+        }
+    }
+
+    $errors ++;
 }
 
 exit $errors;

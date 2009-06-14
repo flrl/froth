@@ -128,7 +128,7 @@ int mem_grow (size_t ncells) {
     else {
         // realloc succeeded, memory region is in the same place but is just longer
         mem_ncells = new_mem_ncells;
-        fprintf(stderr, "succeed (in place)\n");
+        fprintf(stderr, "succeeded (in place)\n");
     }
     return 0;
 }
