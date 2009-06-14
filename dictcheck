@@ -5,41 +5,52 @@ use strict;
 
 my $ROOT = '__ROOT';
 
-my $last = undef;
+my @symbols = ( { name => 'ROOT', cname => $ROOT, 'link' => undef, type => undef } );
 my $errors = 0;
 
 while (<>) {
-    my ($current, $link, $desc) = ();
-    if (m/^\s*PRIMITIVE\s*\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*\{/) {
-        (undef, undef, $current, $link) = ($1, $2, $3, $4);
-        $desc = "Primitive($1)";
+    my ($name, $cname, $link, $type) = ();
+
+    # Parse definitions
+    if (m/^\s*PRIMITIVE\s*\(\"?([^,]+?)\"?,\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*\{/) {
+        ($name, undef, $cname, $link) = ($1, $2, $3, $4);
+        $type = 'primitive';
     }
     elsif (m/^\s*VARIABLE\s*\(([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
-        ($current, undef, $link) = ($1, $2, $3);
-        $desc = "Variable($1)";
-        $current = "var_$current";
+        ($name, undef, $link) = ($1, $2, $3);
+        $cname = "var_$name";
+        $type = 'variable';
     }
     elsif (m/^\s*CONSTANT\s*\(([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
-        ($current, undef, $link) = ($1, $2, $3);
-        $desc = "Constant($1)";
-        $current = "const_$current";
+        ($name, undef, $link) = ($1, $2, $3);
+        $cname = "const_$name";
+        $type = 'constant';
     }
     else {
         next;
     }
-    
-    if (not defined $last) {
-        if ($link ne $ROOT) {
-            print "$ARGV warning: expected $ROOT, got $link at $desc, line $.\n";
-            $errors ++;
+
+    # Check coherence
+    if ($link ne $symbols[0]->{cname}) {
+        printf STDERR "%s:%d: warning: %s \"%s\" expected link to %s, got %s\n",
+            $ARGV, $., $type, $name, $symbols[0]->{cname}, $link;
+
+        if (scalar @symbols > 1) {  # There's always at least one, for the ROOT node
+            print STDERR "$ARGV: note: The following previously-defined symbols ",
+                         "may not be accessible:\n";
+
+            foreach my $s (@symbols) {
+                last if $s->{cname} eq $link or $s->{cname} eq $ROOT;
+                print STDERR "$ARGV: note:    $s->{name} ($s->{type})\n";
+            }
         }
-    }
-    elsif ($link ne $last) {
-        print "$ARGV warning: expected $last, got $link at $desc, line $.\n";
+
         $errors ++;
     }
 
-    $last = $current;
+    # Add it to the list
+    unshift @symbols, { name => $name, cname => $cname, 'link' => $link, type => $type };
+
 } continue {
     close ARGV if eof;  # Reset line number $. for each file
 }
