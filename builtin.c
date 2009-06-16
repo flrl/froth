@@ -14,15 +14,15 @@
     DECLARE_PRIMITIVE(CNAME)
 
 // Define a variable and add it to the dictionary; also create a pointer for direct access
-#define VARIABLE(NAME, INITIAL, LINK)                                           \
-    DictEntry _dict_var_##NAME =                                                \
-        { &_dict_##LINK, sizeof(#NAME) - 1, #NAME, do_variable, {INITIAL} };    \
+#define VARIABLE(NAME, INITIAL, FLAGS, LINK)                                                \
+    DictEntry _dict_var_##NAME =                                                            \
+        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME, do_variable, {INITIAL} };  \
     cell * const var_##NAME = &_dict_var_##NAME.param[0]
 
 // Define a constant and add it to the dictionary; also create a pointer for direct access
-#define CONSTANT(NAME, VALUE, LINK)                                             \
-    DictEntry _dict_const_##NAME =                                              \
-        { &_dict_##LINK, sizeof(#NAME) - 1, #NAME, do_constant, { VALUE } };    \
+#define CONSTANT(NAME, VALUE, FLAGS, LINK)                                                  \
+    DictEntry _dict_const_##NAME =                                                          \
+        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME, do_constant, { VALUE } };  \
     const cell * const const_##NAME = &_dict_const_##NAME.param[0]
 
 // Shorthand macros to make repetitive code more writeable, but possibly less readable
@@ -91,12 +91,19 @@ void do_colon(void *pfa) {
 //        W = param[i] + 1;
 //        (*param[i]) ( param[i] + 1 );
 //    }
-
+    *var_ESCLIT = 0;
     pvf **param;
     for (param = (pvf **) pfa; param && *param; param++) {
         pvf *code = *param;
-        (**code) (code + 1);
+        if (*var_ESCLIT) {
+            PPUSH((cell) code);
+            *var_ESCLIT = 0;
+        }
+        else {
+            (**code) (code + 1);
+        }
     }
+
 
 //    pvf **param = (pvf **) pfa; // W?
 //    while (param && *param) {  // param = 168
@@ -143,29 +150,30 @@ DictEntry _dict___ROOT = {
 /***************************************************************************
   Builtin variables -- keep these together
   Exception: LATEST should be declared very last (see end of file)
-    VARIABLE(NAME, INITIAL, LINK)
+    VARIABLE(NAME, INITIAL, FLAGS, LINK)
 ***************************************************************************/
-VARIABLE (STATE,    S_INTERPRET,    __ROOT);        // default to interpret 
-VARIABLE (BASE,     0,              var_STATE);     // default to smart base
-VARIABLE (UINCR,    INIT_UINCR,     var_BASE);      //
-VARIABLE (UTHRES,   INIT_UTHRES,    var_UINCR);     //
-VARIABLE (HERE,     0,              var_UTHRES);    // default to NULL
+VARIABLE (STATE,    S_INTERPRET,    0,          __ROOT);        // default to interpret 
+VARIABLE (BASE,     0,              0,          var_STATE);     // default to smart base
+VARIABLE (UINCR,    INIT_UINCR,     0,          var_BASE);      //
+VARIABLE (UTHRES,   INIT_UTHRES,    0,          var_UINCR);     //
+VARIABLE (HERE,     0,              0,          var_UTHRES);    // default to NULL
+VARIABLE (ESCLIT,   0,              F_HIDDEN,   var_HERE);      // default to false
 
 
 /***************************************************************************
   Builtin constants -- keep these together
-    CONSTANT(NAME, VALUE, LINK)
+    CONSTANT(NAME, VALUE, FLAGS, LINK)
  ***************************************************************************/
-CONSTANT (VERSION,      0,                      var_HERE);
-CONSTANT (DOCOL,        (cell) &do_colon,       const_VERSION);
-CONSTANT (DOVAR,        (cell) &do_variable,    const_DOCOL);
-CONSTANT (DOCON,        (cell) &do_constant,    const_DOVAR);
-CONSTANT (F_IMMED,      F_IMMED,                const_DOCON);
-CONSTANT (F_HIDDEN,     F_HIDDEN,               const_F_IMMED);
-CONSTANT (F_LENMASK,    F_LENMASK,              const_F_HIDDEN);
-CONSTANT (S_INTERPRET,  S_INTERPRET,            const_F_LENMASK);
-CONSTANT (S_COMPILE,    S_COMPILE,              const_S_INTERPRET);
-CONSTANT (SHEEP,        0xDEADBEEF,             const_F_LENMASK);
+CONSTANT (VERSION,      0,                      0,  var_ESCLIT);
+CONSTANT (DOCOL,        (cell) &do_colon,       0,  const_VERSION);
+CONSTANT (DOVAR,        (cell) &do_variable,    0,  const_DOCOL);
+CONSTANT (DOCON,        (cell) &do_constant,    0,  const_DOVAR);
+CONSTANT (F_IMMED,      F_IMMED,                0,  const_DOCON);
+CONSTANT (F_HIDDEN,     F_HIDDEN,               0,  const_F_IMMED);
+CONSTANT (F_LENMASK,    F_LENMASK,              0,  const_F_HIDDEN);
+CONSTANT (S_INTERPRET,  S_INTERPRET,            0,  const_F_LENMASK);
+CONSTANT (S_COMPILE,    S_COMPILE,              0,  const_S_INTERPRET);
+CONSTANT (SHEEP,        0xDEADBEEF,             0,  const_S_COMPILE);
 
 
 /***************************************************************************
@@ -635,12 +643,23 @@ PRIMITIVE ("C@", 0, _fetchbyte, _storebyte) {
 // ( FIXME )
 PRIMITIVE ("C@C!", 0, _ccopy, _fetchbyte) {
     // FIXME wtf
+    // maybe this is supposed to take two addresses and copy a byte from one to the other?
+    // but then wtf is "increment destination", "increment source" about?
 }
 
 
-// ( FIXME )
+// ( src dest len -- )
 PRIMITIVE ("CMOVE", 0, _cmove, _ccopy) {
-    // FIXME wtf
+    REG(a);
+    REG(b);
+    REG(c);
+
+    PPOP(a);  // len
+    PPOP(b);  // dest
+    PPOP(c);  // src
+
+    // memmove(dest, src, len);
+    memmove((void*) b, (void*) c, a);
 }
 
 
@@ -772,9 +791,14 @@ PRIMITIVE (">DFA", 0, _toDFA, _toCFA) {
     PPUSH(a + sizeof(DictEntry*) + sizeof(uint8_t) + MAX_WORD_LEN + sizeof(pvf));
 }
 
+// ( -- )
+PRIMITIVE ("LIT", 0, _LIT, _toDFA) {
+    *var_ESCLIT = 1;
+}
+
 
 // ( FIXME )
-PRIMITIVE ("CREATE", 0, _CREATE, _toDFA) {
+PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     // FIXME
 }
 
@@ -816,4 +840,4 @@ PRIMITIVE ("USHRINK", 0, _USHRINK, _UGROWN) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (cell) &_dict_var_LATEST, _USHRINK);  // FIXME keep this updated!
+VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _USHRINK);  // FIXME keep this updated!

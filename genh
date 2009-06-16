@@ -21,10 +21,10 @@ while (<>) {
     if (m/^\s*PRIMITIVE\s*\([^,]+,\s*[^,]+,\s*([^,]+),\s*[^,]+\s*\)\s*\{/) {
         print "void $1 (void *);\n";
     }
-    elsif (m/^\s*VARIABLE\s*\(([^,]+),\s*[^,]+,\s*[^,]+\s*\)\s*;/) {
+    elsif (m/^\s*VARIABLE\s*\(([^,]+),\s*[^,]+,\s*[^,]+,\s*[^,]+\s*\)\s*;/) {
         print "extern cell * const var_$1;\n";
     }
-    elsif (m/^\s*CONSTANT\s*\(([^,]+),\s*[^,]+,\s*[^,]+\s*\)\s*;/) {
+    elsif (m/^\s*CONSTANT\s*\(([^,]+),\s*[^,]+,\s*[^,]+,\s*[^,]+\s*\)\s*;/) {
         print "extern const cell * const const_$1;\n";
     }
 }

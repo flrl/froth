@@ -17,13 +17,13 @@ while (<>) {
         ($name, undef, $cname, $link) = ($1, $2, $3, $4);
         $type = 'primitive';
     }
-    elsif (m/^\s*VARIABLE\s*\(([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
-        ($name, undef, $link) = ($1, $2, $3);
+    elsif (m/^\s*VARIABLE\s*\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
+        ($name, undef, undef, $link) = ($1, $2, $3, $4);
         $cname = "var_$name";
         $type = 'variable';
     }
-    elsif (m/^\s*CONSTANT\s*\(([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
-        ($name, undef, $link) = ($1, $2, $3);
+    elsif (m/^\s*CONSTANT\s*\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
+        ($name, undef, undef, $link) = ($1, $2, $3, $4);
         $cname = "const_$name";
         $type = 'constant';
     }
