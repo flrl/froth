@@ -30,13 +30,24 @@ enum {
     F_LENMASK = 0x1F,
 };
 
-enum {
+typedef enum {
     S_INTERPRET = 0,
     S_COMPILE = 1,
-};
+} InterpreterState;
 
+typedef enum {
+    DM_SKIP = -1,
+    DM_NORMAL = 0,
+    DM_BRANCH = 1,
+    DM_LITERAL = 2,
+    DM_SLITERAL = 3,
+} DocolonMode;
 
 extern Stack    parameter_stack;
 extern cell     W;
+
+extern InterpreterState interpreter_state;
+extern DocolonMode docolon_mode;
+
 
 #endif

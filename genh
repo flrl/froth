@@ -18,7 +18,7 @@ print <<"PREAMBLE";
 PREAMBLE
 
 while (<>) {
-    if (m/^\s*PRIMITIVE\s*\([^,]+,\s*[^,]+,\s*([^,]+),\s*[^,]+\s*\)\s*\{/) {
+    if (m/^\s*PRIMITIVE\s*\(\"[^"]+\",\s*[^,]+,\s*([^,]+),\s*[^,]+\s*\)\s*\{/) {
         print "void $1 (void *);\n";
     }
     elsif (m/^\s*VARIABLE\s*\(([^,]+),\s*[^,]+,\s*[^,]+,\s*[^,]+\s*\)\s*;/) {

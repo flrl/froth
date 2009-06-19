@@ -13,7 +13,7 @@ while (<>) {
     my ($name, $cname, $link, $type) = ();
 
     # Parse definitions
-    if (m/^\s*PRIMITIVE\s*\(\"?([^,]+?)\"?,\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*\{/) {
+    if (m/^\s*PRIMITIVE\s*\(\"([^"]+?)\",\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*\{/) {
         ($name, undef, $cname, $link) = ($1, $2, $3, $4);
         $type = 'primitive';
     }

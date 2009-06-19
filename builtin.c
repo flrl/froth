@@ -37,7 +37,7 @@
 #define PTOP(X)       X = stack_top(&parameter_stack)
 #define PPOP(X)       X = stack_pop(&parameter_stack)
 #define PPUSH(X)      stack_push(&parameter_stack, (X))
-
+#define CELLALIGN(X)  (((X) + (sizeof(cell) - 1)) && ~(sizeof(cell) - 1))
 
 
 
@@ -98,18 +98,70 @@ void do_colon(void *pfa) {
 //        W = param[i] + 1;
 //        (*param[i]) ( param[i] + 1 );
 //    }
-    *var_ESCLIT = 0;
-    pvf **param;
-    for (param = (pvf **) pfa; param && *param; param++) {
-        pvf *code = *param;
-        if (*var_ESCLIT) {
-            PPUSH((cell) code);
-            *var_ESCLIT = 0;
-        }
-        else {
-            (**code) (code + 1);
+
+//    pvf **param = (pvf **) pfa; // W?
+//    while (param && *param) {  // param = 168
+//        pvf *code = *param;    // code = 292
+//        void *arg = code + 1;  // arg = 296
+//        W = arg;
+
+//        (**code) ( arg );
+
+//        param++;
+//    }
+    REG(a);
+    REG(b);
+    docolon_mode = DM_NORMAL;
+    cell *param = pfa;
+    for (int i = 0; param[i] != *const_EXIT; i++) {
+        switch (docolon_mode) {
+            case DM_SKIP:
+                // do nothing
+                break;
+            case DM_NORMAL:
+                // FIXME is this right?
+                (*((pvf *) param[i])) (param[i] + sizeof(cell));
+                break;
+            case DM_BRANCH:
+                // FIXME is this right?
+                a = param[i];   // param is an offset to branch to
+                i += a;         // branch to offset
+                docolon_mode = DM_NORMAL;
+                break;
+            case DM_LITERAL:
+                PPUSH((cell) param[i]);
+                docolon_mode = DM_NORMAL;
+                break;
+            case DM_SLITERAL:
+                // FIXME is this right?
+                a = param[i];       // length
+                b = (cell) &param[i+1];    // start of string
+                PPUSH(b);
+                PPUSH(a);
+                i += CELLALIGN(a) / sizeof(cell);
+                docolon_mode = DM_NORMAL;
+                break;
         }
     }
+
+
+//    docolon_mode = DM_NORMAL;
+//    pvf **param;
+//    for (param = (pvf **) pfa; param && *param; param++) {
+//        pvf *code = *param;
+//        switch (docolon_mode) {
+//            case DM_NORMAL:
+//                (**code) (code + 1);
+//                break;
+
+//            case DM_LITERAL:
+//                PPUSH((cell) code);
+//                docolon_mode = DM_NORMAL;
+//                break;
+
+//            // FIXME write the rest of these
+//        }
+//    }
 
 
 //    pvf **param = (pvf **) pfa; // W?
@@ -159,23 +211,22 @@ DictEntry _dict___ROOT = {
   Exception: LATEST should be declared very last (see end of file)
     VARIABLE(NAME, INITIAL, FLAGS, LINK)
 ***************************************************************************/
-VARIABLE (STATE,    S_INTERPRET,    0,          __ROOT);        // default to interpret 
-VARIABLE (BASE,     0,              0,          var_STATE);     // default to smart base
+VARIABLE (BASE,     0,              0,          __ROOT);        // default to smart base
 VARIABLE (UINCR,    INIT_UINCR,     0,          var_BASE);      //
 VARIABLE (UTHRES,   INIT_UTHRES,    0,          var_UINCR);     //
 VARIABLE (HERE,     0,              0,          var_UTHRES);    // default to NULL
-VARIABLE (ESCLIT,   0,              F_HIDDEN,   var_HERE);      // default to false
 
 
 /***************************************************************************
   Builtin constants -- keep these together
     CONSTANT(NAME, VALUE, FLAGS, LINK)
  ***************************************************************************/
-CONSTANT (VERSION,      0,                      0,  var_ESCLIT);
+CONSTANT (VERSION,      0,                      0,  var_HERE);
 CONSTANT (DOCOL,        (cell) &do_colon,       0,  const_VERSION);
 CONSTANT (DOVAR,        (cell) &do_variable,    0,  const_DOCOL);
 CONSTANT (DOCON,        (cell) &do_constant,    0,  const_DOVAR);
-CONSTANT (F_IMMED,      F_IMMED,                0,  const_DOCON);
+CONSTANT (EXIT,         0,                      0,  const_DOCON);
+CONSTANT (F_IMMED,      F_IMMED,                0,  const_EXIT);
 CONSTANT (F_HIDDEN,     F_HIDDEN,               0,  const_F_IMMED);
 CONSTANT (F_LENMASK,    F_LENMASK,              0,  const_F_HIDDEN);
 CONSTANT (S_INTERPRET,  S_INTERPRET,            0,  const_F_LENMASK);
@@ -188,8 +239,10 @@ CONSTANT (SHEEP,        0xDEADBEEF,             0,  const_S_COMPILE);
     READONLY(NAME, CELLFUNC, FLAGS, LINK)
  ***************************************************************************/
 
-READONLY (U0, (cell)mem_get_start(), 0, const_S_COMPILE);
-READONLY (USIZE, mem_get_ncells(), 0, readonly_U0);
+READONLY (U0,           (cell)mem_get_start(),  0, const_S_COMPILE);
+READONLY (USIZE,        mem_get_ncells(),       0, readonly_U0);
+READONLY (DOCOLMODE,    docolon_mode,           0, readonly_USIZE);
+READONLY (STATE,        interpreter_state,      0, readonly_DOCOLMODE);
 
 
 /***************************************************************************
@@ -198,7 +251,7 @@ READONLY (USIZE, mem_get_ncells(), 0, readonly_U0);
  ***************************************************************************/
 
 // ( a -- )
-PRIMITIVE ("DROP", 0, _DROP, readonly_USIZE) {
+PRIMITIVE ("DROP", 0, _DROP, readonly_STATE) {
     REG(a);
     PPOP(a);
 }
@@ -790,29 +843,162 @@ PRIMITIVE (">DFA", 0, _toDFA, _toCFA) {
     PPUSH(a + sizeof(DictEntry*) + sizeof(uint8_t) + MAX_WORD_LEN + sizeof(pvf));
 }
 
+
 // ( -- )
 PRIMITIVE ("LIT", 0, _LIT, _toDFA) {
-    *var_ESCLIT = 1;
+    docolon_mode = DM_LITERAL;
 }
 
 
-// ( FIXME )
+// ( addr len -- )
 PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
-    // FIXME
+    cell name_length;
+    cell name_addr;
+    DictEntry *new_entry;
+
+    PPOP(name_length);
+    PPOP(name_addr);
+    
+    // clip the length to within range
+    name_length = ((name_length > MAX_WORD_LEN) ? MAX_WORD_LEN : name_length);
+
+    // set up the new entry
+    new_entry = *(DictEntry **)var_HERE;
+    memset(new_entry, 0, sizeof(DictEntry));
+    new_entry->link = *(DictEntry**)var_LATEST;
+    new_entry->name_length = name_length;
+    strncpy(new_entry->name, (const char *) name_addr, name_length);
+
+    // update HERE and LATEST
+    *var_LATEST = (cell) new_entry;
+    *var_HERE = (cell) new_entry + sizeof(DictEntry);
 }
 
 
-// FIXME other stuff
+// ( a -- )
+PRIMITIVE (",", 0, _comma, _CREATE) {
+    REG(a);
 
+    PPOP(a);
+    **(cell**)var_HERE = a;
+    *var_HERE += sizeof(cell);
+    // FIXME is this right?
+}
+
+
+// ( -- )
+PRIMITIVE ("[", F_IMMED, _lbrac, _comma) {
+    interpreter_state = S_INTERPRET;
+}
+
+
+// ( -- )
+PRIMITIVE ("]", 0, _rbrac, _lbrac) {
+    interpreter_state = S_COMPILE;
+}
+
+
+// ( -- )
+PRIMITIVE (":", 0, _colon, _rbrac) {
+    _WORD(NULL);
+    _CREATE(NULL);
+    PPUSH(*const_DOCOL);
+    _comma(NULL);
+    PPUSH(*var_LATEST);
+    _fetch(NULL);
+    _HIDDEN(NULL);
+    _rbrac(NULL);
+}
+
+
+// ( -- )
+PRIMITIVE (";", F_IMMED, _semicolon, _colon) {
+    PPUSH(*const_EXIT);
+    _comma(NULL);
+    PPUSH(*var_LATEST);
+    _fetch(NULL);
+    _HIDDEN(NULL);
+    _lbrac(NULL);
+}
+
+
+// ( -- )
+PRIMITIVE ("IMMEDIATE", F_IMMED, _IMMEDIATE, _semicolon) {
+    DictEntry *latest = *(DictEntry **)var_LATEST;
+
+    latest->name_length ^= F_IMMED;
+}
+
+
+// ( addr -- )
+PRIMITIVE ("HIDDEN", 0, _HIDDEN, _IMMEDIATE) {
+    REG(a);
+
+    PPOP(a);
+
+    ((DictEntry*) a)->name_length ^= F_HIDDEN;
+}
+
+
+// ( -- )
+PRIMITIVE ("HIDE", 0, _HIDE, _HIDDEN) {
+    _WORD(NULL);
+    _FIND(NULL);
+    _HIDDEN(NULL);
+}
+
+
+// ( -- )
+PRIMITIVE ("'", 0, _tick, _HIDE) {
+    _WORD(NULL);
+    _FIND(NULL);
+    _toCFA(NULL);
+}
+
+
+// ( -- )
+PRIMITIVE ("BRANCH", 0, _BRANCH, _tick) {
+    docolon_mode = DM_BRANCH;
+}
+
+
+// ( cond -- )
+PRIMITIVE ("0BRANCH", 0, _0BRANCH, _BRANCH) {
+    REG(a);
+
+    PPOP(a);
+    if (a == 0)  docolon_mode = DM_BRANCH;
+    else         docolon_mode = DM_SKIP;
+}
+
+
+// ( -- )
+PRIMITIVE ("LITSTRING", 0, _LITSTRING, _0BRANCH) {
+    docolon_mode = DM_SLITERAL;
+}
+
+
+// ( -- )
+PRIMITIVE ("TELL", 0, _TELL, _LITSTRING) {
+    REG(a);
+    REG(b);
+
+    PPOP(a);  // len
+    PPOP(b);  // addr
+    while (a--) {
+        putchar(*(char *)(b++));
+    }
+}
 
 
 // ( -- status )
-PRIMITIVE ("UGROW", 0, _UGROW, _CREATE) {
+PRIMITIVE ("UGROW", 0, _UGROW, _TELL) {
     REG(a);
 
     a = mem_grow(*var_UINCR);
     PPUSH(a);
 }
+
 
 // ( ncells -- status )
 PRIMITIVE ("UGROWN", 0, _UGROWN, _UGROW) {
