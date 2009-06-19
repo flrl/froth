@@ -27,6 +27,9 @@ while (<>) {
     elsif (m/^\s*CONSTANT\s*\(([^,]+),\s*[^,]+,\s*[^,]+,\s*[^,]+\s*\)\s*;/) {
         print "extern const cell * const const_$1;\n";
     }
+    elsif (m/^\s*READONLY\s*\(([^,]+),\s*[^,]+,\s*[^,]+,\s*[^,]+\s*\)\s*;/) {
+        print "void readonly_$1 (void *);\n";
+    }
 }
 
 print <<"POSTAMBLE";

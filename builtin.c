@@ -25,6 +25,13 @@
         { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME, do_constant, { VALUE } };  \
     const cell * const const_##NAME = &_dict_const_##NAME.param[0]
 
+// Define a "read only" variable and add it to the dictionary (special case of PRIMITIVE)
+#define READONLY(NAME, CELLFUNC, FLAGS, LINK)                                       \
+    DECLARE_PRIMITIVE(readonly_##NAME);                                             \
+    DictEntry _dict_readonly_##NAME =                                               \
+        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME, readonly_##NAME, };  \
+    DECLARE_PRIMITIVE(readonly_##NAME) { REG(a); a = (CELLFUNC); PPUSH(a); }
+
 // Shorthand macros to make repetitive code more writeable, but possibly less readable
 #define REG(X)        register cell X
 #define PTOP(X)       X = stack_top(&parameter_stack)
@@ -177,12 +184,21 @@ CONSTANT (SHEEP,        0xDEADBEEF,             0,  const_S_COMPILE);
 
 
 /***************************************************************************
+  Builtin read only variables -- keep these together
+    READONLY(NAME, CELLFUNC, FLAGS, LINK)
+ ***************************************************************************/
+
+READONLY (U0, (cell)mem_get_start(), 0, const_S_COMPILE);
+READONLY (USIZE, mem_get_ncells(), 0, readonly_U0);
+
+
+/***************************************************************************
   Builtin code words -- keep these together
     PRIMITIVE(NAME, FLAGS, CNAME, LINK)
  ***************************************************************************/
 
 // ( a -- )
-PRIMITIVE ("DROP", 0, _DROP, const_S_COMPILE) {
+PRIMITIVE ("DROP", 0, _DROP, readonly_USIZE) {
     REG(a);
     PPOP(a);
 }
@@ -555,26 +571,9 @@ PRIMITIVE ("INVERT", 0, _INVERT, _XOR) {
 
 /* Memory access primitives */
 
-// ( -- addr )
-PRIMITIVE ("U0", 0, _U0, _INVERT) {
-    REG(a);
-
-    a = (cell) mem_get_start();
-    PPUSH(a);
-}
-
-
-// ( -- ncells )
-PRIMITIVE ("USIZE", 0, _USIZE, _U0) {
-    REG(a);
-
-    a = mem_get_ncells();
-    PPUSH(a);
-}
-
 
 // ( value addr -- )
-PRIMITIVE ("!", 0, _store, _USIZE) {
+PRIMITIVE ("!", 0, _store, _INVERT) {
     REG(a);
     REG(b);
 

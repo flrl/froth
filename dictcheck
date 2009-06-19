@@ -27,6 +27,11 @@ while (<>) {
         $cname = "const_$name";
         $type = 'constant';
     }
+    elsif (m/^\s*READONLY\s*\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*\)\s*;/) {
+        ($name, undef, undef, $link) = ($1, $2, $3, $4);
+        $cname = "readonly_$name";
+        $type = 'readonly';
+    }
     else {
         next;
     }
