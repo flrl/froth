@@ -12,6 +12,8 @@ char                error_message[MAX_ERROR_LEN];
 jmp_buf             cold_boot;
 jmp_buf             warm_boot;
 
+DictDebug foo;
+
 int main (int argc, char **argv) {
 
     // ABORT supposedly clears the data stack and then calls QUIT

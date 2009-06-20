@@ -34,6 +34,12 @@ typedef struct _dict_entry {
     cell        param[];
 } DictEntry;
 
+typedef struct _dict_debug {
+    DictHeader  header;
+    pvf         code;
+    cell        param[20];
+} DictDebug;
+
 enum {
     F_IMMED = 0x80,
     F_HIDDEN = 0x20,
