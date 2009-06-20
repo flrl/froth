@@ -1,0 +1,4 @@
+* add error states for stack underflow and stack overflow, and make the stack_* functions fire
+    them off
+* work out how to make a prompt work
+* convert everything to use new_cell and rename it to cell

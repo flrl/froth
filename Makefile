@@ -17,6 +17,7 @@ builtin.h : builtin.c
 	perl genh _BUILTIN_H $^ > $@
 
 $(TARGET) : $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS)
 
 $(DEPS) : $(GENS)
 

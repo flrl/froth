@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "forth.h"
+#include "stack.h"
 
 // Function signature for a primitive
 #define DECLARE_PRIMITIVE(P)    void P (void *pfa)
@@ -112,30 +113,36 @@ void do_colon(void *pfa) {
     REG(a);
     REG(b);
     docolon_mode = DM_NORMAL;
-    cell *param = pfa;
-    for (int i = 0; param[i] != *const_EXIT; i++) {
+//    cell *param = pfa;
+    new_cell *param = pfa;
+    for (int i = 0; param[i].cfa != *(pvf**)const_EXIT; i++) {
         switch (docolon_mode) {
             case DM_SKIP:
                 // do nothing
                 break;
             case DM_NORMAL:
                 // FIXME is this right?
-                (*((pvf *) param[i])) (param[i] + sizeof(cell));
+//                (*((pvf *) param[i])) (param[i] + sizeof(cell));
+//                (**param[i].cfa) (param[i].pfa + sizeof(cell));
+                (**param[i].cfa) (param[i].pfa + 1);
                 break;
             case DM_BRANCH:
                 // FIXME is this right?
-                a = param[i];   // param is an offset to branch to
+//                a = param[i];   // param is an offset to branch to
+                a = param[i].i;
                 i += a;         // branch to offset
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_LITERAL:
-                PPUSH((cell) param[i]);
+//                PPUSH((cell) param[i]);
+                PPUSH((cell)param[i].i);  // FIXME is this right?
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_SLITERAL:
                 // FIXME is this right?
-                a = param[i];       // length
-                b = (cell) &param[i+1];    // start of string
+                a = param[i].u;       // length
+//                b = (cell) &param[i+1];    // start of string
+                b = (cell) &param[i+1]; // start of string
                 PPUSH(b);
                 PPUSH(a);
                 i += CELLALIGN(a) / sizeof(cell);
@@ -720,8 +727,11 @@ PRIMITIVE ("KEY", 0, _KEY, _cmove) {
     REG(a);
 
     /* stdio is line buffered when attached to terminals :) */
-    a = fgetc(stdin);
-    PPUSH(a);
+    if ((a = fgetc(stdin)) != EOF) {
+        PPUSH(a);
+    }
+    else if (feof(stdin))  exit(0);
+    else  exit(1);
 }
 
 
@@ -752,9 +762,9 @@ PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
     /* Then start storing chars in the buffer */
     b = 0; // Position within array
     do {
+        buf[b++] = a; // Already set by virtue of finding end leading whitespace before
         _KEY(NULL);
         PPOP(a);
-        buf[b++] = a;
     } while ( b < MAX_WORD_LEN && a != ' ' && a != '\t' && a != '\n' );
 
     if (b < MAX_WORD_LEN) {
@@ -793,8 +803,17 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 }
 
 
+// ( n -- )
+PRIMITIVE (".", 0, _dot, _NUMBER) {
+    REG(a);
+
+    PPOP(a);
+    printf("%zi", a);
+}
+
+
 // ( addr len -- addr )
-PRIMITIVE ("FIND", 0, _FIND, _NUMBER) {
+PRIMITIVE ("FIND", 0, _FIND, _dot) {
     char *word;
     size_t len;
     REG(a);
@@ -854,7 +873,7 @@ PRIMITIVE ("LIT", 0, _LIT, _toDFA) {
 PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     cell name_length;
     cell name_addr;
-    DictEntry *new_entry;
+    DictHeader *new_header;
 
     PPOP(name_length);
     PPOP(name_addr);
@@ -863,15 +882,15 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     name_length = ((name_length > MAX_WORD_LEN) ? MAX_WORD_LEN : name_length);
 
     // set up the new entry
-    new_entry = *(DictEntry **)var_HERE;
-    memset(new_entry, 0, sizeof(DictEntry));
-    new_entry->link = *(DictEntry**)var_LATEST;
-    new_entry->name_length = name_length;
-    strncpy(new_entry->name, (const char *) name_addr, name_length);
+    new_header = *(DictHeader **)var_HERE;
+    memset(new_header, 0, sizeof(DictHeader));
+    new_header->link = *(DictEntry**)var_LATEST;
+    new_header->name_length = name_length;
+    strncpy(new_header->name, (const char *) name_addr, name_length);
 
     // update HERE and LATEST
-    *var_LATEST = (cell) new_entry;
-    *var_HERE = (cell) new_entry + sizeof(DictEntry);
+    *var_LATEST = (cell) new_header;
+    *var_HERE = (cell) new_header + sizeof(DictHeader);
 }
 
 
@@ -905,7 +924,6 @@ PRIMITIVE (":", 0, _colon, _rbrac) {
     PPUSH(*const_DOCOL);
     _comma(NULL);
     PPUSH(*var_LATEST);
-    _fetch(NULL);
     _HIDDEN(NULL);
     _rbrac(NULL);
 }
@@ -916,7 +934,6 @@ PRIMITIVE (";", F_IMMED, _semicolon, _colon) {
     PPUSH(*const_EXIT);
     _comma(NULL);
     PPUSH(*var_LATEST);
-    _fetch(NULL);
     _HIDDEN(NULL);
     _lbrac(NULL);
 }
@@ -1018,6 +1035,93 @@ PRIMITIVE ("USHRINK", 0, _USHRINK, _UGROWN) {
     PPUSH(a);
 }
 
+
+// ( -- )
+PRIMITIVE ("QUIT", 0, _QUIT, _USHRINK) {
+    longjmp(warm_boot, 1);
+}
+
+
+// ( -- )
+PRIMITIVE ("INTERPRET", 0, _INTERPRET, _QUIT) {
+    REG(addr);
+    REG(len);
+    REG(a);
+
+    _WORD(NULL);
+
+    _2DUP(NULL);
+    PPOP(len);
+    PPOP(addr);
+
+    _FIND(NULL);
+    PPOP(a); 
+    if (a) {
+        // Found the word
+        DictEntry *de = (DictEntry *) a;
+        if ((de->name_length & F_IMMED) || interpreter_state == S_INTERPRET) {
+            // If we're interpret mode or the word is flagged F_IMMED, execute it
+            PPUSH(a);
+            _toCFA(NULL);
+            PPOP(a);
+            (**(pvf *) a) (a + sizeof(cell));
+        }
+        else {
+            // But if we're in compile mode, compile it
+            PPUSH(a);
+            _toCFA(NULL);
+            _comma(NULL);
+        }
+    }
+    else {
+        // Word not found - must be a literal, so try to parse a number out of it
+        PPUSH(addr);
+        PPUSH(len);
+        _NUMBER(NULL);
+        PPOP(a);  // Grab the return status
+        if (a == 0) {
+            // If there were 0 characters remaining, a number was parsed successfully
+            // Value is still on the stack
+            if (interpreter_state == S_COMPILE) {
+                // If we're in compile mode, first compile LIT...
+                PPUSH((cell) &_dict__LIT.code);
+                _comma(NULL);
+                // ... and then the value (which is still on the stack)
+                _comma(NULL);
+            }
+
+//            PPOP(a);  // Grab the value
+
+//            if (interpreter_state == S_INTERPRET) {
+//                // If we're in interpret mode, push it onto the stack
+//                PPUSH(a);
+//            }
+//            else {
+//                // If we're in compile mode, first compile LIT, then the literal
+//                PPUSH((cell) &_LIT);
+//                _comma(NULL);
+//                PPUSH(a);
+//                _comma(NULL);
+//            }
+        }
+        else if (a == len) {
+            // Parse error
+            error_state = E_PARSE;
+            snprintf(error_message, MAX_ERROR_LEN, 
+                "unrecognised word '%.*s'", (int) len, (const char *) addr);
+
+            _QUIT(NULL);
+        }
+        else {
+            error_state = E_PARSE;
+            snprintf(error_message, MAX_ERROR_LEN,
+                "ignored trailing junk following number '%.*s'", (int) len, (const char *) addr);
+            _QUIT(NULL);
+        }
+    }
+}
+
+
 /***************************************************************************
     The LATEST variable denotes the top of the dictionary.  Its initial
     value points to its own dictionary entry (tricky).
@@ -1025,4 +1129,4 @@ PRIMITIVE ("USHRINK", 0, _USHRINK, _UGROWN) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _USHRINK);  // FIXME keep this updated!
+VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _INTERPRET);  // FIXME keep this updated!
