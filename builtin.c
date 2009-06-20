@@ -115,7 +115,7 @@ void do_colon(void *pfa) {
     docolon_mode = DM_NORMAL;
 //    cell *param = pfa;
     new_cell *param = pfa;
-    for (int i = 0; param[i].cfa != *(pvf**)const_EXIT; i++) {
+    for (int i = 0; docolon_mode != DM_NORMAL || param[i].cfa != *(pvf**)const_EXIT; i++) {
         switch (docolon_mode) {
             case DM_SKIP:
                 // do nothing
@@ -830,6 +830,7 @@ PRIMITIVE ("FIND", 0, _FIND, _dot) {
             if (strncmp(word, de->name, len) == 0) {
                 // found a match
                 result = de;
+                break;
             }
         }
         de = de->link;
