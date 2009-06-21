@@ -238,7 +238,11 @@ CONSTANT (F_HIDDEN,     F_HIDDEN,               0,  const_F_IMMED);
 CONSTANT (F_LENMASK,    F_LENMASK,              0,  const_F_HIDDEN);
 CONSTANT (S_INTERPRET,  S_INTERPRET,            0,  const_F_LENMASK);
 CONSTANT (S_COMPILE,    S_COMPILE,              0,  const_S_INTERPRET);
-CONSTANT (SHEEP,        0xDEADBEEF,             0,  const_S_COMPILE);
+CONSTANT (CELL_MIN,     INTPTR_MIN,             0,  const_S_COMPILE);
+CONSTANT (CELL_MAX,     INTPTR_MAX,             0,  const_CELL_MIN);
+CONSTANT (UCELL_MIN,    0,                      0,  const_CELL_MAX);
+CONSTANT (UCELL_MAX,    UINTPTR_MAX,            0,  const_UCELL_MIN);
+//CONSTANT (SHEEP,        0xDEADBEEF,             0,  const_S_COMPILE);
 
 
 /***************************************************************************
@@ -246,7 +250,7 @@ CONSTANT (SHEEP,        0xDEADBEEF,             0,  const_S_COMPILE);
     READONLY(NAME, CELLFUNC, FLAGS, LINK)
  ***************************************************************************/
 
-READONLY (U0,           (cell)mem_get_start(),  0, const_S_COMPILE);
+READONLY (U0,           (cell)mem_get_start(),  0, const_UCELL_MAX);
 READONLY (USIZE,        mem_get_ncells(),       0, readonly_U0);
 READONLY (DOCOLMODE,    docolon_mode,           0, readonly_USIZE);
 READONLY (STATE,        interpreter_state,      0, readonly_DOCOLMODE);
@@ -495,7 +499,7 @@ PRIMITIVE ("<", 0, _lt, _notequals) {
     REG(b);
 
     PPOP(a);
-    PPOP(a);
+    PPOP(b);
     PPUSH(b < a);
 }
 
@@ -506,7 +510,7 @@ PRIMITIVE (">", 0, _gt, _lt) {
     REG(b);
 
     PPOP(a);
-    PPOP(a);
+    PPOP(b);
     PPUSH(b > a);
 }
 
@@ -517,7 +521,7 @@ PRIMITIVE ("<=", 0, _lte, _gt) {
     REG(b);
 
     PPOP(a);
-    PPOP(a);
+    PPOP(b);
     PPUSH(b <= a);
 }
 
@@ -528,7 +532,7 @@ PRIMITIVE (">=", 0, _gte, _lte) {
     REG(b);
 
     PPOP(a);
-    PPOP(a);
+    PPOP(b);
     PPUSH(b >= a);
 }
 
@@ -803,17 +807,62 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 }
 
 
-// ( n -- )
-PRIMITIVE (".", 0, _dot, _NUMBER) {
-    REG(a);
+// ( u n -- )
+PRIMITIVE ("U.R", 0, _UdotR, _NUMBER) {
+//    REG(base);
+//    REG(a);
+    register new_cell base;
+    register new_cell a;
+    REG(i);
+    const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    char buf[33];  // 32 digits, terminating '\0'
+    int minlen;
 
+    base.u = ((*var_BASE && *var_BASE <= 36 && *var_BASE >= 2) ? *var_BASE : 10);
+
+    memset(buf, 0, sizeof(buf));
+    i = 32; // Start at end of string
+    PPOP(minlen);
+    PPOP(a.u);
+    do {
+        buf[--i] = charset[a.u % base.u];
+        a.u /= base.u;
+    } while (a.u);
+    // buf[i] is the start of the converted string
+    printf("%*.32s", minlen, &buf[i]);
+}
+
+
+// ( i n -- )
+PRIMITIVE (".R", 0, _dotR, _UdotR) {
+    REG(base);
+    REG(a);
+    REG(i);
+    const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    char buf[34];  // possible sign, 32 digits, terminating '\0'
+    int neg;
+    int minlen;
+
+    base = ((*var_BASE && *var_BASE <= 36 && *var_BASE >= 2) ? *var_BASE : 10);
+
+    memset(buf, 0, sizeof(buf));
+    i = 33; // Start at end of string
+    PPOP(minlen);
     PPOP(a);
-    printf("%zi", a);
+    neg = (a < 0);
+    a = abs(a);  // FIXME when a == INTPTR_MIN, abs() will not work
+    do {
+        buf[--i] = charset[a % base];
+        a /= base;
+    } while (a);
+    if (neg)  buf[--i] = '-';
+    // buf[i] is the start of the converted string
+    printf("%*.33s", minlen, &buf[i]);
 }
 
 
 // ( addr len -- addr )
-PRIMITIVE ("FIND", 0, _FIND, _dot) {
+PRIMITIVE ("FIND", 0, _FIND, _dotR) {
     char *word;
     size_t len;
     REG(a);
@@ -1123,6 +1172,15 @@ PRIMITIVE ("INTERPRET", 0, _INTERPRET, _QUIT) {
 }
 
 
+// ( -- )
+PRIMITIVE ("breakpoint", F_IMMED, _breakpoint, _INTERPRET) {
+    REG(a);
+
+    PPUSH(1);
+    PPOP(a);
+}
+
+
 /***************************************************************************
     The LATEST variable denotes the top of the dictionary.  Its initial
     value points to its own dictionary entry (tricky).
@@ -1130,4 +1188,4 @@ PRIMITIVE ("INTERPRET", 0, _INTERPRET, _QUIT) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _INTERPRET);  // FIXME keep this updated!
+VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _breakpoint);  // FIXME keep this updated!
