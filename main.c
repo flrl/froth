@@ -4,6 +4,8 @@
 #include "forth.h"
 #include "stack.h"
 
+DictDebug junk;  // Make sure DictDebug symbol gets compiled in
+
 Stack               parameter_stack;
 InterpreterState    interpreter_state;
 DocolonMode         docolon_mode;
@@ -12,7 +14,7 @@ char                error_message[MAX_ERROR_LEN];
 jmp_buf             cold_boot;
 jmp_buf             warm_boot;
 
-DictDebug foo;
+extern DictEntry _dict_var_LATEST;  // This is "private" to builtin.c, but needed here to reinit
 
 int main (int argc, char **argv) {
 
@@ -27,6 +29,7 @@ int main (int argc, char **argv) {
     stack_init(&parameter_stack);
     mem_init();
     *var_BASE = 0;
+    *var_LATEST = (cell) &_dict_var_LATEST;
 
     // If I want to to jump back to warm_boot, memory and stack must still be valid
     // Under what circumstances will I need to do this?

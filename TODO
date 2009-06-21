@@ -2,3 +2,4 @@
     them off
 * work out how to make a prompt work
 * convert everything to use new_cell and rename it to cell
+* implementation of \ (buried inside WORD) seems to be incorrect
