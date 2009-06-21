@@ -119,6 +119,7 @@ void do_colon(void *pfa) {
         switch (docolon_mode) {
             case DM_SKIP:
                 // do nothing
+                docolon_mode = DM_NORMAL;
                 break;
             case DM_NORMAL:
                 // FIXME is this right?
@@ -130,7 +131,7 @@ void do_colon(void *pfa) {
                 // FIXME is this right?
 //                a = param[i];   // param is an offset to branch to
                 a = param[i].i;
-                i += a;         // branch to offset
+                i += (a - 1);   // nb the for() increment will add the extra 1
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_LITERAL:
@@ -145,7 +146,7 @@ void do_colon(void *pfa) {
                 b = (cell) &param[i+1]; // start of string
                 PPUSH(b);
                 PPUSH(a);
-                i += CELLALIGN(a) / sizeof(cell);
+                i += CELLALIGN(a) / sizeof(cell);  // FIXME same bug as DM_BRANCH?
                 docolon_mode = DM_NORMAL;
                 break;
         }
@@ -1093,7 +1094,14 @@ PRIMITIVE ("QUIT", 0, _QUIT, _USHRINK) {
 
 
 // ( -- )
-PRIMITIVE ("INTERPRET", 0, _INTERPRET, _QUIT) {
+PRIMITIVE ("ABORT", 0, _ABORT, _QUIT) {
+    fprintf(stderr, "Abort called, rebooting\n");
+    longjmp(cold_boot, 1);
+}
+
+
+// ( -- )
+PRIMITIVE ("INTERPRET", 0, _INTERPRET, _ABORT) {
     REG(addr);
     REG(len);
     REG(a);

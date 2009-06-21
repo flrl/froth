@@ -26,6 +26,7 @@ int main (int argc, char **argv) {
     docolon_mode = DM_NORMAL;
     stack_init(&parameter_stack);
     mem_init();
+    *var_BASE = 0;
 
     // If I want to to jump back to warm_boot, memory and stack must still be valid
     // Under what circumstances will I need to do this?
