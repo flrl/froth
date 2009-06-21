@@ -1189,6 +1189,27 @@ PRIMITIVE ("breakpoint", F_IMMED, _breakpoint, _INTERPRET) {
 }
 
 
+// ( a -- a * sizeof(cell))
+PRIMITIVE ("CELLS", 0, _CELLS, _breakpoint) {
+    REG(a);
+
+    PPOP(a);
+    PPUSH(a * sizeof(cell));
+}
+
+
+// (a -- a / sizeof(cell))
+PRIMITIVE ("/CELLS", 0, _divCELLS, _CELLS) {
+    REG(a);
+    REG(b);
+
+    PPOP(a);
+    b = sizeof(cell);  // wtf, why do I need to do it this way?
+    PPUSH(a / b);
+}
+
+
+
 /***************************************************************************
     The LATEST variable denotes the top of the dictionary.  Its initial
     value points to its own dictionary entry (tricky).
@@ -1196,4 +1217,4 @@ PRIMITIVE ("breakpoint", F_IMMED, _breakpoint, _INTERPRET) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _breakpoint);  // FIXME keep this updated!
+VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _divCELLS);  // FIXME keep this updated!
