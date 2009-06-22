@@ -40,7 +40,8 @@
 #define PPUSH(X)      stack_push(&parameter_stack, (X))
 #define CELLALIGN(X)  (((X) + (sizeof(cell) - 1)) && ~(sizeof(cell) - 1))
 
-
+// pre-declare a few things
+DictEntry _dict__LIT;
 
 
 // FIXME do i want these all to take a void* argument, or should they just use a global register
@@ -73,13 +74,83 @@
 
 */
 
-void do_colon2(void *cfa) {
-    // This version expects its argument to point to the CFA rather than the PFA
-    for (pvf **code = (pvf **) cfa + 1; code && *code; code++) {
-        (***code)(*code);
+void do_interpret (void *pfa) {
+    REG(addr);
+    REG(len);
+    REG(a);
+
+    _WORD(NULL);
+
+    _2DUP(NULL);
+    PPOP(len);
+    PPOP(addr);
+
+    _FIND(NULL);
+    PPOP(a); 
+    if (a) {
+        // Found the word
+        DictEntry *de = (DictEntry *) a;
+        if ((de->name_length & F_IMMED) || interpreter_state == S_INTERPRET) {
+            // If we're interpret mode or the word is flagged F_IMMED, execute it
+            PPUSH(a);
+            _toCFA(NULL);
+            PPOP(a);
+            (**(pvf *) a) (a + sizeof(cell));
+        }
+        else {
+            // But if we're in compile mode, compile it
+            PPUSH(a);
+            _toCFA(NULL);
+            _comma(NULL);
+        }
+    }
+    else {
+        // Word not found - must be a literal, so try to parse a number out of it
+        PPUSH(addr);
+        PPUSH(len);
+        _NUMBER(NULL);
+        PPOP(a);  // Grab the return status
+        if (a == 0) {
+            // If there were 0 characters remaining, a number was parsed successfully
+            // Value is still on the stack
+            if (interpreter_state == S_COMPILE) {
+                // If we're in compile mode, first compile LIT...
+                PPUSH((cell) &_dict__LIT.code);
+                _comma(NULL);
+                // ... and then the value (which is still on the stack)
+                _comma(NULL);
+            }
+
+//            PPOP(a);  // Grab the value
+
+//            if (interpreter_state == S_INTERPRET) {
+//                // If we're in interpret mode, push it onto the stack
+//                PPUSH(a);
+//            }
+//            else {
+//                // If we're in compile mode, first compile LIT, then the literal
+//                PPUSH((cell) &_LIT);
+//                _comma(NULL);
+//                PPUSH(a);
+//                _comma(NULL);
+//            }
+        }
+        else if (a == len) {
+            // Parse error
+            error_state = E_PARSE;
+            snprintf(error_message, MAX_ERROR_LEN, 
+                "unrecognised word '%.*s'", (int) len, (const char *) addr);
+
+            _QUIT(NULL);
+        }
+        else {
+            error_state = E_PARSE;
+            snprintf(error_message, MAX_ERROR_LEN,
+                "ignored trailing junk following number '%.*s'", (int) len, (const char *) addr);
+            _QUIT(NULL);
+        }
     }
 }
-
 
 
 /*
@@ -89,27 +160,6 @@ void do_colon2(void *cfa) {
     ***pfa  = interpreter function for the word 
  */
 void do_colon(void *pfa) {
-
-    // deref pfa to get the cfa of the word to execute
-    // increment pfa and do it again
-    // stop when pfa derefs to null
-
-//    pvf **param = (pvf **) pfa; // W?
-//    for (int i=0; param[i] != NULL; i++) {
-//        W = param[i] + 1;
-//        (*param[i]) ( param[i] + 1 );
-//    }
-
-//    pvf **param = (pvf **) pfa; // W?
-//    while (param && *param) {  // param = 168
-//        pvf *code = *param;    // code = 292
-//        void *arg = code + 1;  // arg = 296
-//        W = arg;
-
-//        (**code) ( arg );
-
-//        param++;
-//    }
     REG(a);
     REG(b);
     docolon_mode = DM_NORMAL;
@@ -151,37 +201,6 @@ void do_colon(void *pfa) {
                 break;
         }
     }
-
-
-//    docolon_mode = DM_NORMAL;
-//    pvf **param;
-//    for (param = (pvf **) pfa; param && *param; param++) {
-//        pvf *code = *param;
-//        switch (docolon_mode) {
-//            case DM_NORMAL:
-//                (**code) (code + 1);
-//                break;
-
-//            case DM_LITERAL:
-//                PPUSH((cell) code);
-//                docolon_mode = DM_NORMAL;
-//                break;
-
-//            // FIXME write the rest of these
-//        }
-//    }
-
-
-//    pvf **param = (pvf **) pfa; // W?
-//    while (param && *param) {  // param = 168
-//        pvf *code = *param;    // code = 292
-//        void *arg = code + 1;  // arg = 296
-//        W = arg;
-
-//        (**code) ( arg );
-
-//        param++;
-//    }
 }
 
 
@@ -478,7 +497,7 @@ PRIMITIVE ("=", 0, _equals, _modulus) {
     REG(b);
 
     PPOP(a);
-    PPOP(a);
+    PPOP(b);
     PPUSH(a == b);
 }
 
@@ -489,7 +508,7 @@ PRIMITIVE ("<>", 0, _notequals, _equals) {
     REG(b);
 
     PPOP(a);
-    PPOP(a);
+    PPOP(b);
     PPUSH(a != b);
 }
 
@@ -704,11 +723,16 @@ PRIMITIVE ("C@", 0, _fetchbyte, _storebyte) {
 }
 
 
-// ( FIXME )
+// ( src dest -- src+1 dest+1 )
 PRIMITIVE ("C@C!", 0, _ccopy, _fetchbyte) {
-    // FIXME wtf
-    // maybe this is supposed to take two addresses and copy a byte from one to the other?
-    // but then wtf is "increment destination", "increment source" about?
+    REG(src);
+    REG(dest);
+
+    PPOP(dest);
+    PPOP(src);
+    *(char *) dest = *(const char *) src;
+    PPUSH(src+1);
+    PPUSH(dest+1);
 }
 
 
@@ -1101,87 +1125,7 @@ PRIMITIVE ("ABORT", 0, _ABORT, _QUIT) {
 
 
 // ( -- )
-PRIMITIVE ("INTERPRET", 0, _INTERPRET, _ABORT) {
-    REG(addr);
-    REG(len);
-    REG(a);
-
-    _WORD(NULL);
-
-    _2DUP(NULL);
-    PPOP(len);
-    PPOP(addr);
-
-    _FIND(NULL);
-    PPOP(a); 
-    if (a) {
-        // Found the word
-        DictEntry *de = (DictEntry *) a;
-        if ((de->name_length & F_IMMED) || interpreter_state == S_INTERPRET) {
-            // If we're interpret mode or the word is flagged F_IMMED, execute it
-            PPUSH(a);
-            _toCFA(NULL);
-            PPOP(a);
-            (**(pvf *) a) (a + sizeof(cell));
-        }
-        else {
-            // But if we're in compile mode, compile it
-            PPUSH(a);
-            _toCFA(NULL);
-            _comma(NULL);
-        }
-    }
-    else {
-        // Word not found - must be a literal, so try to parse a number out of it
-        PPUSH(addr);
-        PPUSH(len);
-        _NUMBER(NULL);
-        PPOP(a);  // Grab the return status
-        if (a == 0) {
-            // If there were 0 characters remaining, a number was parsed successfully
-            // Value is still on the stack
-            if (interpreter_state == S_COMPILE) {
-                // If we're in compile mode, first compile LIT...
-                PPUSH((cell) &_dict__LIT.code);
-                _comma(NULL);
-                // ... and then the value (which is still on the stack)
-                _comma(NULL);
-            }
-
-//            PPOP(a);  // Grab the value
-
-//            if (interpreter_state == S_INTERPRET) {
-//                // If we're in interpret mode, push it onto the stack
-//                PPUSH(a);
-//            }
-//            else {
-//                // If we're in compile mode, first compile LIT, then the literal
-//                PPUSH((cell) &_LIT);
-//                _comma(NULL);
-//                PPUSH(a);
-//                _comma(NULL);
-//            }
-        }
-        else if (a == len) {
-            // Parse error
-            error_state = E_PARSE;
-            snprintf(error_message, MAX_ERROR_LEN, 
-                "unrecognised word '%.*s'", (int) len, (const char *) addr);
-
-            _QUIT(NULL);
-        }
-        else {
-            error_state = E_PARSE;
-            snprintf(error_message, MAX_ERROR_LEN,
-                "ignored trailing junk following number '%.*s'", (int) len, (const char *) addr);
-            _QUIT(NULL);
-        }
-    }
-}
-
-
-// ( -- )
-PRIMITIVE ("breakpoint", F_IMMED, _breakpoint, _INTERPRET) {
+PRIMITIVE ("breakpoint", F_IMMED, _breakpoint, _ABORT) {
     REG(a);
 
     PPUSH(1);

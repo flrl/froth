@@ -37,7 +37,7 @@ typedef struct _dict_entry {
 typedef struct _dict_debug {
     DictHeader  header;
     pvf         code;
-    cell        param[20];
+    cell        param[40];
 } DictDebug;
 
 enum {
@@ -65,7 +65,8 @@ typedef enum {
 } Error;
 
 extern Stack    parameter_stack;
-extern cell     W;
+extern Stack    return_stack;
+extern Stack    control_stack;
 
 extern InterpreterState interpreter_state;
 extern DocolonMode docolon_mode;
@@ -75,4 +76,5 @@ extern char  error_message[];
 extern jmp_buf cold_boot; //?
 extern jmp_buf warm_boot; //?
 
+extern void do_interpret (void*);
 #endif

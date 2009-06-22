@@ -1,6 +1,7 @@
 #ifndef _STACK_H
 #define _STACK_H
 
+#include <stdint.h>
 #include <string.h>
 
 #include "cell.h"

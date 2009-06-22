@@ -47,7 +47,7 @@ int main (int argc, char **argv) {
 
     // Run the interpreter
     while (1) {
-        _INTERPRET(NULL);
+        do_interpret(NULL);
     }
 
     exit(0);

@@ -3,3 +3,5 @@
 * work out how to make a prompt work
 * convert everything to use new_cell and rename it to cell
 * implementation of \ (buried inside WORD) seems to be incorrect
+* add other stacks -- return, compile
+* implement if/else/then to also work in interp mode
