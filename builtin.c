@@ -38,7 +38,7 @@
 #define PTOP(X)       X = stack_top(&parameter_stack)
 #define PPOP(X)       X = stack_pop(&parameter_stack)
 #define PPUSH(X)      stack_push(&parameter_stack, (X))
-#define CELLALIGN(X)  (((X) + (sizeof(cell) - 1)) && ~(sizeof(cell) - 1))
+#define CELLALIGN(X)  (((X) + (sizeof(cell) - 1)) & ~(sizeof(cell) - 1))
 
 // pre-declare a few things
 DictEntry _dict__LIT;
@@ -172,31 +172,23 @@ void do_colon(void *pfa) {
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_NORMAL:
-                // FIXME is this right?
-//                (*((pvf *) param[i])) (param[i] + sizeof(cell));
-//                (**param[i].cfa) (param[i].pfa + sizeof(cell));
                 (**param[i].cfa) (param[i].pfa + 1);
                 break;
             case DM_BRANCH:
-                // FIXME is this right?
-//                a = param[i];   // param is an offset to branch to
-                a = param[i].i;
+                a = param[i].i; // param is an offset to branch to
                 i += (a - 1);   // nb the for() increment will add the extra 1
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_LITERAL:
-//                PPUSH((cell) param[i]);
-                PPUSH((cell)param[i].i);  // FIXME is this right?
+                PPUSH((cell)param[i].i);
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_SLITERAL:
-                // FIXME is this right?
-                a = param[i].u;       // length
-//                b = (cell) &param[i+1];    // start of string
+                a = param[i].u;         // length
                 b = (cell) &param[i+1]; // start of string
                 PPUSH(b);
                 PPUSH(a);
-                i += CELLALIGN(a) / sizeof(cell);  // FIXME same bug as DM_BRANCH?
+                i += (CELLALIGN(a) / sizeof(cell));  
                 docolon_mode = DM_NORMAL;
                 break;
         }
