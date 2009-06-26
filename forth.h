@@ -14,6 +14,7 @@
 
 #define MAX_WORD_LEN    (31)
 #define MAX_ERROR_LEN   (1024)
+#define SENTINEL        (0xCAFEBABE)
 
 /* Initial memory sizes, in cells */
 #define INIT_USIZE      (4096) 
@@ -24,12 +25,14 @@ typedef struct _dict_header {
     struct _dict_entry *link;
     uint8_t     name_length;
     char        name[MAX_WORD_LEN];
+    uint32_t    sentinel;
 } DictHeader;
 
 typedef struct _dict_entry {
     struct _dict_entry *link;
     uint8_t     name_length;
     char        name[MAX_WORD_LEN];
+    uint32_t    sentinel;
     pvf         code;
     cell        param[];
 } DictEntry;
@@ -77,4 +80,5 @@ extern jmp_buf cold_boot; //?
 extern jmp_buf warm_boot; //?
 
 extern void do_interpret (void*);
+
 #endif

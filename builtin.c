@@ -8,29 +8,32 @@
 #define DECLARE_PRIMITIVE(P)    void P (void *pfa)
 
 // Define a primitive and add it to the dictionary
-#define PRIMITIVE(NAME, FLAGS, CNAME, LINK)                                 \
-    DECLARE_PRIMITIVE(CNAME);                                               \
-    DictEntry _dict_##CNAME =                                               \
-        { &_dict_##LINK, ((FLAGS) | (sizeof(NAME) - 1)), NAME, CNAME, };    \
+#define PRIMITIVE(NAME, FLAGS, CNAME, LINK)                                         \
+    DECLARE_PRIMITIVE(CNAME);                                                       \
+    DictEntry _dict_##CNAME =                                                       \
+        { &_dict_##LINK, ((FLAGS) | (sizeof(NAME) - 1)), NAME, SENTINEL, CNAME, };  \
     DECLARE_PRIMITIVE(CNAME)
 
 // Define a variable and add it to the dictionary; also create a pointer for direct access
-#define VARIABLE(NAME, INITIAL, FLAGS, LINK)                                                \
-    DictEntry _dict_var_##NAME =                                                            \
-        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME, do_variable, {INITIAL} };  \
+#define VARIABLE(NAME, INITIAL, FLAGS, LINK)                        \
+    DictEntry _dict_var_##NAME =                                    \
+        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME,    \
+            SENTINEL, do_variable, {INITIAL} };                     \
     cell * const var_##NAME = &_dict_var_##NAME.param[0]
 
 // Define a constant and add it to the dictionary; also create a pointer for direct access
-#define CONSTANT(NAME, VALUE, FLAGS, LINK)                                                  \
-    DictEntry _dict_const_##NAME =                                                          \
-        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME, do_constant, { VALUE } };  \
+#define CONSTANT(NAME, VALUE, FLAGS, LINK)                          \
+    DictEntry _dict_const_##NAME =                                  \
+        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME,    \
+            SENTINEL, do_constant, { VALUE } };                     \
     const cell * const const_##NAME = &_dict_const_##NAME.param[0]
 
 // Define a "read only" variable and add it to the dictionary (special case of PRIMITIVE)
-#define READONLY(NAME, CELLFUNC, FLAGS, LINK)                                       \
-    DECLARE_PRIMITIVE(readonly_##NAME);                                             \
-    DictEntry _dict_readonly_##NAME =                                               \
-        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME, readonly_##NAME, };  \
+#define READONLY(NAME, CELLFUNC, FLAGS, LINK)                       \
+    DECLARE_PRIMITIVE(readonly_##NAME);                             \
+    DictEntry _dict_readonly_##NAME =                               \
+        { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME,    \
+            SENTINEL, readonly_##NAME, };                           \
     DECLARE_PRIMITIVE(readonly_##NAME) { REG(a); a = (CELLFUNC); PPUSH(a); }
 
 // Shorthand macros to make repetitive code more writeable, but possibly less readable
@@ -73,6 +76,16 @@ DictEntry _dict__LIT;
                                              \-> (etc)
 
 */
+static inline void do_execute (const pvf *xt, void *arg) {
+    uint32_t *sentinel = (uint32_t*) (xt) - 1;
+    if (*sentinel == SENTINEL) {
+        (**xt)(arg);
+    }
+    else {
+        fprintf(stderr, "Invalid execution token: %p\n", xt);
+    }
+}
+
 
 void do_interpret (void *pfa) {
     REG(addr);
@@ -95,7 +108,8 @@ void do_interpret (void *pfa) {
             PPUSH(a);
             _toCFA(NULL);
             PPOP(a);
-            (**(pvf *) a) (a + sizeof(cell));
+            do_execute ((pvf *) a, (void*) (a + sizeof(cell)));
+//            (**(pvf *) a) (a + sizeof(cell));
         }
         else {
             // But if we're in compile mode, compile it
@@ -165,14 +179,15 @@ void do_colon(void *pfa) {
     docolon_mode = DM_NORMAL;
 //    cell *param = pfa;
     new_cell *param = pfa;
-    for (int i = 0; docolon_mode != DM_NORMAL || param[i].cfa != *(pvf**)const_EXIT; i++) {
+    for (int i = 0; docolon_mode != DM_NORMAL || param[i].cfa != 0; i++) {
         switch (docolon_mode) {
             case DM_SKIP:
                 // do nothing
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_NORMAL:
-                (**param[i].cfa) (param[i].pfa + 1);
+                do_execute(param[i].cfa, param[i].pfa + 1);
+//                (**param[i].cfa) (param[i].pfa + 1);
                 break;
             case DM_BRANCH:
                 a = param[i].i; // param is an offset to branch to
@@ -221,6 +236,7 @@ DictEntry _dict___ROOT = {
     NULL,   // link
     0,      // name length + flags
     "",     // name
+    0,      // sentinel
     NULL,   // code
 };
 
@@ -909,15 +925,17 @@ PRIMITIVE ("FIND", 0, _FIND, _dotR) {
 // ( addr -- cfa )
 PRIMITIVE (">CFA", 0, _toCFA, _FIND) {
 /*
-struct _dict_entry  *link;
-uint8_t             name_length; 
-char                name[MAX_WORD_LEN];
-pvf                 code;
+    struct _dict_entry *link;
+    uint8_t     name_length;
+    char        name[MAX_WORD_LEN];
+    uint32_t    sentinel;
+    pvf         code;
+    cell        param[];
 */
     REG(a);
 
     PPOP(a);
-    PPUSH(a + sizeof(DictEntry*) + sizeof(uint8_t) + MAX_WORD_LEN);
+    PPUSH(a + sizeof(struct _dict_entry*) + sizeof(uint8_t) + MAX_WORD_LEN + sizeof(uint32_t));
 }
 
 
@@ -926,7 +944,8 @@ PRIMITIVE (">DFA", 0, _toDFA, _toCFA) {
     REG(a);
 
     PPOP(a);
-    PPUSH(a + sizeof(DictEntry*) + sizeof(uint8_t) + MAX_WORD_LEN + sizeof(pvf));
+    PPUSH(a + sizeof(struct _dict_entry*) + sizeof(uint8_t) + MAX_WORD_LEN + 
+            sizeof(uint32_t) + sizeof(pvf));
 }
 
 
@@ -954,6 +973,7 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     new_header->link = *(DictEntry**)var_LATEST;
     new_header->name_length = name_length;
     strncpy(new_header->name, (const char *) name_addr, name_length);
+    new_header->sentinel = SENTINEL;
 
     // update HERE and LATEST
     *var_LATEST = (cell) new_header;
@@ -1145,6 +1165,15 @@ PRIMITIVE ("/CELLS", 0, _divCELLS, _CELLS) {
 }
 
 
+// ( xt -- )
+PRIMITIVE ("EXECUTE", 0, _EXECUTE, _divCELLS) {
+    REG(xt);
+
+    PPOP(xt);
+    do_execute((pvf*) xt, (cell*) xt + 1);
+}
+
+
 
 /***************************************************************************
     The LATEST variable denotes the top of the dictionary.  Its initial
@@ -1153,4 +1182,4 @@ PRIMITIVE ("/CELLS", 0, _divCELLS, _CELLS) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _divCELLS);  // FIXME keep this updated!
+VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _EXECUTE);  // FIXME keep this updated!
