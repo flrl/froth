@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,11 +39,15 @@
     DECLARE_PRIMITIVE(readonly_##NAME) { REG(a); a = (CELLFUNC); PPUSH(a); }
 
 // Shorthand macros to make repetitive code more writeable, but possibly less readable
-#define REG(X)        register cell X
-#define PTOP(X)       X = stack_top(&parameter_stack)
-#define PPOP(X)       X = stack_pop(&parameter_stack)
-#define PPUSH(X)      stack_push(&parameter_stack, (X))
-#define CELLALIGN(X)  (((X) + (sizeof(cell) - 1)) & ~(sizeof(cell) - 1))
+#define REG(X)          register cell X
+#define PTOP(X)         X = stack_top(&parameter_stack)
+#define PPOP(X)         X = stack_pop(&parameter_stack)
+#define PPUSH(X)        stack_push(&parameter_stack, (X))
+#define CELLALIGN(X)    (((X) + (sizeof(cell) - 1)) & ~(sizeof(cell) - 1))
+#define RTOP(X)         X = stack_top(&return_stack)
+#define RPOP(X)         X = stack_pop(&return_stack)
+#define RPUSH(X)        stack_push(&return_stack, (X))
+
 
 // pre-declare a few things
 DictEntry _dict__LIT;
@@ -148,7 +153,7 @@ void do_interpret (void *pfa) {
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN, 
                 "unrecognised word '%.*s'", (int) len, (const char *) addr);
-
+            PPOP(a);  // discard junk value
             _QUIT(NULL);
         }
         else {
@@ -376,8 +381,27 @@ PRIMITIVE ("2DUP", 0, _2DUP, _2DROP) {
 }
 
 
+// ( n*a n -- n*a n*a )
+PRIMITIVE ("NDUP", 0, _NDUP, _2DUP) {
+    cell *buf;
+    REG(n);
+
+    PPOP(n);
+    if ((buf = malloc(n * sizeof(cell))) != NULL) {
+        for (register int i=0; i<n; i++)  PPOP(buf[i]);
+        for (register int i=0; i<n; i++)  PPUSH(buf[i]);
+        for (register int i=0; i<n; i++)  PPUSH(buf[i]);
+        free(buf);
+    }
+    else {
+        fprintf(stderr, "malloc for 2 * %"PRIiPTR" cells failed in NDUP\n", n);
+        _ABORT(NULL);
+    }
+}
+
+
 // ( d c b a -- b a d c ) 
-PRIMITIVE ("2SWAP", 0, _2SWAP, _2DUP) {
+PRIMITIVE ("2SWAP", 0, _2SWAP, _NDUP) {
     REG(a);
     REG(b);
     REG(c);
@@ -755,8 +779,137 @@ PRIMITIVE ("CMOVE", 0, _cmove, _ccopy) {
 }
 
 
+/* Return stack primitives */
+
+//A program shall not access values on the return stack (using R@, R>, 2R@ or 2R>) that it did 
+//not place there using >R or 2>R;
+
+// ( a -- ) ( R: -- a )
+PRIMITIVE (">R", F_NOINTERP, _ltR, _cmove) {
+    REG(a);
+
+    PPOP(a);
+    RPUSH(a);
+}
+
+
+// ( a b -- ) ( R: -- a b )
+PRIMITIVE ("2>R", F_NOINTERP, _2ltR, _ltR) {
+    REG(a);
+    REG(b);
+
+    PPOP(b);
+    PPOP(a);
+    RPUSH(a);
+    RPUSH(b);
+}
+
+
+// ( -- a ) ( R: a -- )
+PRIMITIVE ("R>", F_NOINTERP, _Rgt, _2ltR) {
+    REG(a);
+
+    RPOP(a);
+    PPUSH(a);
+}
+
+
+// ( -- a b ) ( R: a b -- )
+PRIMITIVE ("2R>", F_NOINTERP, _2Rgt, _Rgt) {
+    REG(a);
+    REG(b);
+
+    RPOP(b);
+    RPOP(a);
+    PPUSH(a);
+    PPUSH(b);
+}
+
+
+// ( -- a ) ( R: a -- a )
+PRIMITIVE ("R@", F_NOINTERP, _Rat, _2Rgt) {
+    REG(a);
+
+    RTOP(a);
+    PPUSH(a);
+}
+
+
+// ( -- a b ) ( R: a b -- a b )
+PRIMITIVE ("2R@", F_NOINTERP, _2Rat, _Rat) {
+    REG(a);
+    REG(b);
+
+    RPOP(b);
+    RTOP(a);
+    RPUSH(b);
+    PPUSH(a);
+    PPUSH(b);
+}
+
+
+/* Debug stuff */
+
+
+// ( n*a n*b n -- n*a )
+PRIMITIVE ("ASSERT",  0, _ASSERT, _2Rat) {
+    int err = 0;
+    new_cell *buf;
+    register new_cell n;
+
+    PPOP(n.u);
+
+    if (stack_count(&parameter_stack) >= 2 * n.u) {
+        if ((buf = malloc (2 * n.u * sizeof(cell))) != NULL) {
+            for (int i = 0; i < 2 * n.u; i++) {
+                PPOP(buf[i].u);
+            }
+            
+            for (int i = 0; i < n.u; i++) {
+                if (buf[i].u != buf[i + n.u].u)  err++;   
+            }
+
+            if (err) {
+                printf("ASSERT %"PRIuPTR" failed:\nExpected: ", n.u);
+                for (int i = n.u - 1; i >= 0; i--) {
+                    printf("%"PRIuPTR" ", buf[i].u);
+                }
+                printf("\nFound: ");
+                for (int i = 2*n.u - 1; i >= n.u; i--) {
+                    printf ("%"PRIuPTR" ", buf[i].u);
+                }
+                printf("\n");
+                _ABORT(NULL);
+            }
+            else {
+                printf("ASSERT passed\n");
+                for (int i = 2 * n.u - 1; i >= n.u; i--) {
+                    PPUSH(buf[i].u);
+                }
+            }
+
+            free (buf);
+        }
+        else {
+            // Couldn't allocate memory?!
+            fprintf(stderr, "malloc for %"PRIuPTR" cells failed in ASSERT\n", 2 * n.u);
+            _ABORT(NULL);
+        }
+    }
+    else {
+        // stack would underflow!
+        fprintf(stderr, "ASSERT: Not enough elements on stack "
+                        "(requested: 2 * %"PRIuPTR", found %"PRIuPTR")\n",
+                        n.u, stack_count(&parameter_stack));
+        _ABORT(NULL);
+    }
+}
+
+
+/* Other stuff */
+
 // ( -- char )
-PRIMITIVE ("KEY", 0, _KEY, _cmove) {
+PRIMITIVE ("KEY", 0, _KEY, _ASSERT) {
     REG(a);
 
     /* stdio is line buffered when attached to terminals :) */

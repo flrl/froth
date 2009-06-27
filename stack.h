@@ -28,4 +28,8 @@ static inline cell stack_top (const Stack *stack) {
     return stack->values[stack->index];
 }
 
+static inline cell stack_count (const Stack *stack) {
+    return stack->index + 1;
+}
+
 #endif
