@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -92,6 +93,7 @@ void do_interpret (void *pfa) {
     REG(len);
     REG(a);
 
+    PPUSH(' ');
     _WORD(NULL);
 
     _2DUP(NULL);
@@ -101,25 +103,31 @@ void do_interpret (void *pfa) {
     _FIND(NULL);
     PPOP(a); 
     if (a) {
-        // Found the word
+        // Found the word in the dictionary
         DictEntry *de = (DictEntry *) a;
-        if ((de->name_length & F_IMMED) || interpreter_state == S_INTERPRET) {
-            // If we're interpret mode or the word is flagged F_IMMED, execute it
-            PPUSH(a);
-            _toCFA(NULL);
-            PPOP(a);
-            do_execute ((pvf *) a, (void*) (a + sizeof(cell)));
-//            (**(pvf *) a) (a + sizeof(cell));
+        uint8_t flags = de->name_length & ~F_LENMASK;
+
+        if (interpreter_state == S_INTERPRET && (flags & F_NOINTERP)) {
+            // Do nothing
+            fprintf (stderr, "Useless use of \"%.*s\" in interpret mode\n", 
+                (de->name_length & F_LENMASK), de->name);
         }
-        else {
-            // But if we're in compile mode, compile it
+        else if (interpreter_state == S_COMPILE && ! (flags & F_IMMED)) {
+            // Compile it
             PPUSH(a);
             _toCFA(NULL);
             _comma(NULL);
         }
+        else {
+            // Run it
+            PPUSH(a);
+            _toCFA(NULL);
+            PPOP(a);
+            do_execute ((pvf *) a, (void*) (a + sizeof(cell)));
+        }
     }
     else {
-        // Word not found - must be a literal, so try to parse a number out of it
+        // Word not found - try to parse a literal number out of it
         PPUSH(addr);
         PPUSH(len);
         _NUMBER(NULL);
@@ -129,28 +137,14 @@ void do_interpret (void *pfa) {
             // Value is still on the stack
             if (interpreter_state == S_COMPILE) {
                 // If we're in compile mode, first compile LIT...
-                PPUSH((cell) &_dict__LIT.code);
+                PPUSH((cell) DE_to_CFA(&_dict__LIT));
                 _comma(NULL);
                 // ... and then the value (which is still on the stack)
                 _comma(NULL);
             }
-
-//            PPOP(a);  // Grab the value
-
-//            if (interpreter_state == S_INTERPRET) {
-//                // If we're in interpret mode, push it onto the stack
-//                PPUSH(a);
-//            }
-//            else {
-//                // If we're in compile mode, first compile LIT, then the literal
-//                PPUSH((cell) &_LIT);
-//                _comma(NULL);
-//                PPUSH(a);
-//                _comma(NULL);
-//            }
         }
         else if (a == len) {
-            // Parse error
+            // Couldn't parse any digits
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN, 
                 "unrecognised word '%.*s'", (int) len, (const char *) addr);
@@ -158,6 +152,7 @@ void do_interpret (void *pfa) {
             _QUIT(NULL);
         }
         else {
+            // Parsed some digits, but not all
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN,
                 "ignored trailing junk following number '%.*s'", (int) len, (const char *) addr);
@@ -262,7 +257,8 @@ CONSTANT (DOVAR,        (cell) &do_variable,    0,  const_DOCOL);
 CONSTANT (DOCON,        (cell) &do_constant,    0,  const_DOVAR);
 CONSTANT (EXIT,         0,                      0,  const_DOCON);
 CONSTANT (F_IMMED,      F_IMMED,                0,  const_EXIT);
-CONSTANT (F_HIDDEN,     F_HIDDEN,               0,  const_F_IMMED);
+CONSTANT (F_NOINTERP,   F_NOINTERP,             0,  const_F_IMMED);
+CONSTANT (F_HIDDEN,     F_HIDDEN,               0,  const_F_NOINTERP);
 CONSTANT (F_LENMASK,    F_LENMASK,              0,  const_F_HIDDEN);
 CONSTANT (S_INTERPRET,  S_INTERPRET,            0,  const_F_LENMASK);
 CONSTANT (S_COMPILE,    S_COMPILE,              0,  const_S_INTERPRET);
@@ -781,40 +777,51 @@ PRIMITIVE ("EMIT", 0, _EMIT, _KEY) {
 }
 
 
-// ( -- addr len )
+// ( delim -- c-addr len )
 PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
-    static char buf[32];
-    REG(a);
-    REG(b);
+    static int usebuf = 0;  // Double-buffered
+    static CountedString buf[2];
+    
+    REG(delim);
+    REG(key);
+    REG(i);
+    REG(blflag);
 
-    /* First skip leading whitespace or skip-to-eol's */
-    b = 0; // Flag for skip-to-eol
+    memset(buf[usebuf].value, 0, sizeof(buf[usebuf].value));
+
+    /* Get the delimiter */
+    PPOP(delim);
+    blflag = (delim == ' ');  // Treat control chars as whitespace when delim is space
+
+    /* First skip leading delimiters */
     do {
         _KEY(NULL);
-        PPOP(a);
-        if (a == '\\')  b = 1;
-        else if (b && a == '\n')  b = 0;
-    } while ( b || a == ' ' || a == '\t' || a == '\n' );
+        PPOP(key);
+        if (blflag && key < ' ')  key = delim;
+    } while (key == delim);
 
     /* Then start storing chars in the buffer */
-    b = 0; // Position within array
+    i = 0;
     do {
-        buf[b++] = a; // Already set by virtue of finding end leading whitespace before
+        buf[usebuf].value[i++] = key;
         _KEY(NULL);
-        PPOP(a);
-    } while ( b < MAX_WORD_LEN && a != ' ' && a != '\t' && a != '\n' );
+        PPOP(key);
+        if (blflag && key < ' ')  key = delim;
+    } while (i < MAX_COUNTED_STRING_LENGTH && key != delim);
 
-    if (b < MAX_WORD_LEN) {
-        // If the word we read was of a suitable length, return addr and len
-        PPUSH((cell)(&buf));
-        PPUSH(b);
+    /* Return address and length on the stack */
+    if (i < MAX_COUNTED_STRING_LENGTH) {
+        buf[usebuf].length = i;
+        PPUSH((cell) buf[usebuf].value);
+        PPUSH(i);
+        usebuf = (usebuf == 0 ? 1 : 0);
     }
     else {
-        // If we got to the end without finding whitespace, return some sort of error
-        // FIXME really?
+        // Ran out of room, return some kind of error
+        // Don't flip the buffers
+        // FIXME anything else?
         PPUSH(0);
     }
-
 }
 
 
@@ -924,18 +931,10 @@ PRIMITIVE ("FIND", 0, _FIND, _dotR) {
 
 // ( addr -- cfa )
 PRIMITIVE (">CFA", 0, _toCFA, _FIND) {
-/*
-    struct _dict_entry *link;
-    uint8_t     name_length;
-    char        name[MAX_WORD_LEN];
-    uint32_t    sentinel;
-    pvf         code;
-    cell        param[];
-*/
     REG(a);
 
     PPOP(a);
-    PPUSH(a + sizeof(struct _dict_entry*) + sizeof(uint8_t) + MAX_WORD_LEN + sizeof(uint32_t));
+    PPUSH((cell) DE_to_CFA(a));
 }
 
 
@@ -944,8 +943,7 @@ PRIMITIVE (">DFA", 0, _toDFA, _toCFA) {
     REG(a);
 
     PPOP(a);
-    PPUSH(a + sizeof(struct _dict_entry*) + sizeof(uint8_t) + MAX_WORD_LEN + 
-            sizeof(uint32_t) + sizeof(pvf));
+    PPUSH((cell) DE_to_DFA(a));
 }
 
 
@@ -1006,6 +1004,7 @@ PRIMITIVE ("]", 0, _rbrac, _lbrac) {
 
 // ( -- )
 PRIMITIVE (":", 0, _colon, _rbrac) {
+    PPUSH(' ');
     _WORD(NULL);
     _CREATE(NULL);
     PPUSH(*const_DOCOL);
@@ -1017,8 +1016,8 @@ PRIMITIVE (":", 0, _colon, _rbrac) {
 
 
 // ( -- )
-PRIMITIVE (";", F_IMMED, _semicolon, _colon) {
-    PPUSH(*const_EXIT);
+PRIMITIVE (";", F_IMMED | F_NOINTERP, _semicolon, _colon) {
+    PPUSH(*const_EXIT); // FIXME i think this is wrong
     _comma(NULL);
     PPUSH(*var_LATEST);
     _HIDDEN(NULL);
@@ -1034,8 +1033,16 @@ PRIMITIVE ("IMMEDIATE", F_IMMED, _IMMEDIATE, _semicolon) {
 }
 
 
+// ( -- )
+PRIMITIVE ("NOINTERPRET", F_IMMED, _NOINTERP, _IMMEDIATE) {
+    DictEntry *latest = *(DictEntry **)var_LATEST;
+    
+    latest->name_length ^= F_NOINTERP;
+}
+
+
 // ( addr -- )
-PRIMITIVE ("HIDDEN", 0, _HIDDEN, _IMMEDIATE) {
+PRIMITIVE ("HIDDEN", 0, _HIDDEN, _NOINTERP) {
     REG(a);
 
     PPOP(a);
@@ -1046,6 +1053,7 @@ PRIMITIVE ("HIDDEN", 0, _HIDDEN, _IMMEDIATE) {
 
 // ( -- )
 PRIMITIVE ("HIDE", 0, _HIDE, _HIDDEN) {
+    PPUSH(' ');
     _WORD(NULL);
     _FIND(NULL);
     _HIDDEN(NULL);
@@ -1054,6 +1062,7 @@ PRIMITIVE ("HIDE", 0, _HIDE, _HIDDEN) {
 
 // ( -- )
 PRIMITIVE ("'", 0, _tick, _HIDE) {
+    PPUSH(' ');
     _WORD(NULL);
     _FIND(NULL);
     _toCFA(NULL);

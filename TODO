@@ -1,12 +1,17 @@
 * work out how to make a prompt work
 * convert everything to use new_cell and rename it to cell
-* implementation of \ (buried inside WORD) seems to be incorrect, should be its own word
 * add other stacks -- return, control -- and primitives to work with them etc
 * implement if/else/then to also work in interp mode -- see [IF] etc in spec
 * maybe add another flag to say "is only available in compilation state" and add it to such
   words like IF etc that are meaningless in interpreted mode and possibly have edge cases.
   then make do_colon check the flag before trying to run them and if they shouldn't be run
   then just no-op (and maybe print a warning)
+* my CREATE is wrong -- it's supposed to call WORD itself, not expect to find the result of WORD
+  already on the stack
+* my WORD is still wrong -- it's supposed to just return a counted string address, no length lol
+* my FIND is wrong -- should take a counted string, return xt and a flag for immediacy (see spec)
+* debug primitives -- SHOWSTACK, SEE, ASSERT, etc
+* proper test suite built around ASSERT
 
 
 
@@ -17,12 +22,3 @@ ok how about:
     1. reinitialise parameter stack to empty
     2. set error state and error message to something sensible
     3. call QUIT
-
-
-add a "real" EXIT word so colon definitions can exit other than at the end
-    * one option is to make this IMMEDIATE and just append a zero, but in this case, 
-      do_colon needs to break its loop when it finds an actual zero, rather than when it finds
-      the xt for EXIT
-    * other option is to make it just a normal word that does nothing and compiles to an xt in 
-      as usual, which means do_colon stays the same -- however, it means colon definitions will 
-      no longer be zero-terminated, possibly making them harder to read in gdb/hexdump/etc?

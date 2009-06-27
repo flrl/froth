@@ -37,14 +37,26 @@ typedef struct _dict_entry {
     cell        param[];
 } DictEntry;
 
+#define DE_to_CFA(de)   (pvf*)(((void*)(de)) + offsetof(struct _dict_entry, code))
+#define DE_to_DFA(de)   (cell*)(((void*)(de)) + offsetof(struct _dict_entry, param))
+#define XT_to_DE(xt)    (DictEntry*)(((void*)(xt)) - offsetof(struct _dict_entry, code))
+
 typedef struct _dict_debug {
     DictHeader  header;
     pvf         code;
     cell        param[40];
 } DictDebug;
 
+typedef struct _counted_string {
+    uint8_t     length;
+    char        value[255];
+} CountedString;
+#define MAX_COUNTED_STRING_LENGTH (255)
+
+
 enum {
     F_IMMED = 0x80,
+    F_NOINTERP = 0x40,
     F_HIDDEN = 0x20,
     F_LENMASK = 0x1F,
 };
