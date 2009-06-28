@@ -123,14 +123,13 @@ void do_interpret (void *pfa) {
     if (a) {
         // Found the word in the dictionary
         DictEntry *de = (DictEntry *) a;
-        uint8_t flags = de->name_length & ~F_LENMASK;
 
-        if (interpreter_state == S_INTERPRET && (flags & F_NOINTERP)) {
+        if (interpreter_state == S_INTERPRET && (de->flags & F_NOINTERP)) {
             // Do nothing
             fprintf (stderr, "Useless use of \"%.*s\" in interpret mode\n", 
-                (de->name_length & F_LENMASK), de->name);
+                (de->flags & F_LENMASK), de->name);
         }
-        else if (interpreter_state == S_COMPILE && ! (flags & F_IMMED)) {
+        else if (interpreter_state == S_COMPILE && ! (de->flags & F_IMMED)) {
             // Compile it
             DPUSH(a);
             _DEtoCFA(NULL);
@@ -927,13 +926,13 @@ PRIMITIVE ("ASSERT", 0, _ASSERT, _2Rat) {
             int i;
             for (i=0; i < n; i++) {
                 if (i % 8 == 0)  printf("expected> ");
-                printf("%"PRIiPTR", ", dup[i]);
+                printf("%"PRIiPTR" ", dup[i]);
                 if (i % 8 == 7)  putchar('\n');
             }
             if (i % 8 != 0)  putchar('\n');
             for (i=0; i < n; i++) {
-                if (i % 8 == 0)  printf("found> ");
-                printf("%"PRIiPTR", ", orig[i]);
+                if (i % 8 == 0)  printf("found>    ");
+                printf("%"PRIiPTR" ", orig[i]);
                 if (i % 8 == 7)  putchar('\n');
             }
             if (i % 8 != 0)  putchar('\n');
@@ -958,8 +957,8 @@ PRIMITIVE ("SHOWSTACK", 0, _SHOWSTACK, _ASSERT) {
     else {
         register int i;
         for (i = 0; i < stack_count(&data_stack); i++) {
-            if (i % 8 == 0)  printf("stack> ");
-            printf("%"PRIiPTR", ", data_stack.values[i]);
+            if (i % 8 == 0)  printf("stack>  ");
+            printf("%"PRIiPTR" ", data_stack.values[i]);
             if (i % 8 == 7)  putchar('\n');
         }
         if (i % 8 != 0)  putchar('\n');  // if the last number didn't just print one out itself
@@ -1128,7 +1127,7 @@ PRIMITIVE ("FIND", 0, _FIND, _dotR) {
 
     while (de != &_dict___ROOT) {
         // tricky - ignores hidden words
-        if (word->length == (de->name_length & (F_HIDDEN | F_LENMASK))) { 
+        if (word->length == (de->flags & (F_HIDDEN | F_LENMASK))) { 
             if (strncmp(word->value, de->name, word->length) == 0) {
                 // found a match
                 result = de;
@@ -1186,7 +1185,7 @@ PRIMITIVE ("LIT", 0, _LIT, _DFAtoCFA) {
 
 // ( -- addr )
 PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
-    DictHeader2 *new_header;
+    DictHeader *new_header;
     REG(a);
     CountedString *name;
 
@@ -1198,8 +1197,8 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
 
     // Initialise a DictHeader for it
     a = CELLALIGN(*var_HERE);
-    new_header = (DictHeader2 *) a;
-    memset(new_header, 0, sizeof(DictHeader2));
+    new_header = (DictHeader *) a;
+    memset(new_header, 0, sizeof(DictHeader));
     new_header->link = *(DictEntry **) var_LATEST;
     new_header->flags = name->length & F_LENMASK;
     strncpy(new_header->name, name->value, new_header->flags);
@@ -1266,7 +1265,7 @@ PRIMITIVE (";", F_IMMED | F_NOINTERP, _semicolon, _colon) {
 PRIMITIVE ("IMMEDIATE", F_IMMED, _IMMEDIATE, _semicolon) {
     DictEntry *latest = *(DictEntry **)var_LATEST;
 
-    latest->name_length ^= F_IMMED;
+    latest->flags ^= F_IMMED;
 }
 
 
@@ -1274,7 +1273,7 @@ PRIMITIVE ("IMMEDIATE", F_IMMED, _IMMEDIATE, _semicolon) {
 PRIMITIVE ("NOINTERPRET", F_IMMED, _NOINTERP, _IMMEDIATE) {
     DictEntry *latest = *(DictEntry **)var_LATEST;
     
-    latest->name_length ^= F_NOINTERP;
+    latest->flags ^= F_NOINTERP;
 }
 
 
@@ -1284,7 +1283,7 @@ PRIMITIVE ("HIDDEN", 0, _HIDDEN, _NOINTERP) {
 
     DPOP(a);
 
-    ((DictEntry*) a)->name_length ^= F_HIDDEN;
+    ((DictEntry*) a)->flags ^= F_HIDDEN;
 }
 
 

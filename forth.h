@@ -23,23 +23,15 @@
 
 typedef struct _dict_header {
     struct _dict_entry *link;
-    uint8_t     name_length;
-    char        name[MAX_WORD_LEN];
-    uint32_t    sentinel;
-//    pvf         code;     // FIXME this should really be here once CREATE is fixed
-} DictHeader;
-
-typedef struct _dict_header2 {
-    struct _dict_entry *link;
     uint8_t     flags;
     char        name[MAX_WORD_LEN];
     uint32_t    sentinel;
     pvf         code;
-} DictHeader2;
+} DictHeader;
 
 typedef struct _dict_entry {
     struct _dict_entry *link;
-    uint8_t     name_length;
+    uint8_t     flags;
     char        name[MAX_WORD_LEN];
     uint32_t    sentinel;
     pvf         code;
@@ -55,7 +47,6 @@ typedef struct _dict_entry {
 
 typedef struct _dict_debug {
     DictHeader  header;
-    pvf         code;   // FIXME should really be part of the header
     cell        param[40];
 } DictDebug;
 
