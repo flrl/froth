@@ -198,26 +198,26 @@ void do_colon(void *pfa) {
     docolon_mode = DM_NORMAL;
 //    cell *param = pfa;
     new_cell *param = pfa;
-    for (int i = 0; docolon_mode != DM_NORMAL || param[i].cfa != 0; i++) {
+    for (int i = 0; docolon_mode != DM_NORMAL || param[i].as_xt != 0; i++) {
         switch (docolon_mode) {
             case DM_SKIP:
                 // do nothing
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_NORMAL:
-                do_execute(param[i].cfa, param[i].pfa + 1);
+                do_execute(param[i].as_xt, param[i].as_dfa + 1);
                 break;
             case DM_BRANCH:
-                a = param[i].i; // param is an offset to branch to
+                a = param[i].as_i; // param is an offset to branch to
                 i += (a - 1);   // nb the for() increment will add the extra 1
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_LITERAL:
-                DPUSH((cell)param[i].i);
+                DPUSH((cell)param[i].as_i);
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_SLITERAL:
-                a = param[i].u;         // length
+                a = param[i].as_u;         // length
                 b = (cell) &param[i+1]; // start of string
                 DPUSH(b);
                 DPUSH(a);
@@ -1072,16 +1072,16 @@ PRIMITIVE ("U.R", 0, _UdotR, _NUMBER) {
     char buf[33];  // 32 digits, terminating '\0'
     int minlen;
 
-    base.u = ((*var_BASE && *var_BASE <= 36 && *var_BASE >= 2) ? *var_BASE : 10);
+    base.as_u = ((*var_BASE && *var_BASE <= 36 && *var_BASE >= 2) ? *var_BASE : 10);
 
     memset(buf, 0, sizeof(buf));
     i = 32; // Start at end of string
     DPOP(minlen);
-    DPOP(a.u);
+    DPOP(a.as_u);
     do {
-        buf[--i] = charset[a.u % base.u];
-        a.u /= base.u;
-    } while (a.u);
+        buf[--i] = charset[a.as_u % base.as_u];
+        a.as_u /= base.as_u;
+    } while (a.as_u);
     // buf[i] is the start of the converted string
     printf("%*.32s", minlen, &buf[i]);
 }
