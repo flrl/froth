@@ -36,17 +36,32 @@
     DictEntry _dict_readonly_##NAME =                               \
         { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME,    \
             SENTINEL, readonly_##NAME, };                           \
-    DECLARE_PRIMITIVE(readonly_##NAME) { REG(a); a = (CELLFUNC); PPUSH(a); }
+    DECLARE_PRIMITIVE(readonly_##NAME) { REG(a); a = (CELLFUNC); DPUSH(a); }
 
 // Shorthand macros to make repetitive code more writeable, but possibly less readable
 #define REG(X)          register cell X
-#define PTOP(X)         X = stack_top(&parameter_stack)
-#define PPOP(X)         X = stack_pop(&parameter_stack)
-#define PPUSH(X)        stack_push(&parameter_stack, (X))
 #define CELLALIGN(X)    (((X) + (sizeof(cell) - 1)) & ~(sizeof(cell) - 1))
+
+// Data stack macros
+#define DTOP(X)         X = stack_top(&data_stack)
+#define DPOP(X)         X = stack_pop(&data_stack)
+#define DPUSH(X)        stack_push(&data_stack, (X))
+#define DPICK(X)        stack_pick(&data_stack, (X))
+#define DROLL(X)        stack_roll(&data_stack, (X))
+
+// Return stack macros
 #define RTOP(X)         X = stack_top(&return_stack)
 #define RPOP(X)         X = stack_pop(&return_stack)
 #define RPUSH(X)        stack_push(&return_stack, (X))
+#define RPICK(X)        stack_pick(&return_stack, (X))
+#define RROLL(X)        stack_roll(&return_stack, (X))
+
+// Control stack macros
+#define CTOP(X)         X = stack_top(&control_stack)
+#define CPOP(X)         X = stack_pop(&control_stack)
+#define CPUSH(X)        stack_push(&control_stack, (X))
+#define CPICK(X)        stack_pick(&control_stack, (X))
+#define CCOLL(X)        stack_roll(&control_stack, (X))
 
 
 // pre-declare a few things
@@ -94,19 +109,17 @@ static inline void do_execute (const pvf *xt, void *arg) {
 
 
 void do_interpret (void *pfa) {
-    REG(addr);
-    REG(len);
+    CountedString *word;
     REG(a);
 
-    PPUSH(' ');
+    DPUSH(' ');
     _WORD(NULL);
 
-    _2DUP(NULL);
-    PPOP(len);
-    PPOP(addr);
+    DTOP(a);
+    word = (CountedString *) a;
 
     _FIND(NULL);
-    PPOP(a); 
+    DPOP(a); 
     if (a) {
         // Found the word in the dictionary
         DictEntry *de = (DictEntry *) a;
@@ -119,48 +132,55 @@ void do_interpret (void *pfa) {
         }
         else if (interpreter_state == S_COMPILE && ! (flags & F_IMMED)) {
             // Compile it
-            PPUSH(a);
-            _toCFA(NULL);
+            DPUSH(a);
+            _DEtoCFA(NULL);
             _comma(NULL);
         }
         else {
             // Run it
-            PPUSH(a);
-            _toCFA(NULL);
-            PPOP(a);
+            DPUSH(a);
+            _DEtoCFA(NULL);
+            DPOP(a);
             do_execute ((pvf *) a, (void*) (a + sizeof(cell)));
         }
     }
     else {
         // Word not found - try to parse a literal number out of it
-        PPUSH(addr);
-        PPUSH(len);
+        DPUSH((cell) word);
         _NUMBER(NULL);
-        PPOP(a);  // Grab the return status
+        DPOP(a);  // Grab the return status
         if (a == 0) {
             // If there were 0 characters remaining, a number was parsed successfully
             // Value is still on the stack
             if (interpreter_state == S_COMPILE) {
                 // If we're in compile mode, first compile LIT...
-                PPUSH((cell) DE_to_CFA(&_dict__LIT));
+                DPUSH((cell) DE_to_CFA(&_dict__LIT));
                 _comma(NULL);
-                // ... and then the value (which is still on the stack)
+                // ... and then compile and eat the value (which is still on the stack)
                 _comma(NULL);
             }
         }
-        else if (a == len) {
+        else if (a == word->length) {
             // Couldn't parse any digits
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN, 
-                "unrecognised word '%.*s'", (int) len, (const char *) addr);
-            PPOP(a);  // discard junk value
+                "unrecognised word '%.*s'", word->length, word->value);
+            DPOP(a);  // discard junk value
             _QUIT(NULL);
         }
-        else {
+        else if (a > 0) {
             // Parsed some digits, but not all
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN,
-                "ignored trailing junk following number '%.*s'", (int) len, (const char *) addr);
+                "ignored trailing junk following number '%.*s'", word->length, word->value);
+            _QUIT(NULL);  // FIXME rly?
+        }
+        else {
+            // NUMBER failed
+            error_state = E_PARSE;
+            snprintf(error_message, MAX_ERROR_LEN,
+                "couldn't parse number (NUMBER returned %"PRIiPTR")\n", a);
+            DPOP(a);  // discard junk value
             _QUIT(NULL);
         }
     }
@@ -187,7 +207,6 @@ void do_colon(void *pfa) {
                 break;
             case DM_NORMAL:
                 do_execute(param[i].cfa, param[i].pfa + 1);
-//                (**param[i].cfa) (param[i].pfa + 1);
                 break;
             case DM_BRANCH:
                 a = param[i].i; // param is an offset to branch to
@@ -195,14 +214,14 @@ void do_colon(void *pfa) {
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_LITERAL:
-                PPUSH((cell)param[i].i);
+                DPUSH((cell)param[i].i);
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_SLITERAL:
                 a = param[i].u;         // length
                 b = (cell) &param[i+1]; // start of string
-                PPUSH(b);
-                PPUSH(a);
+                DPUSH(b);
+                DPUSH(a);
                 i += (CELLALIGN(a) / sizeof(cell));  
                 docolon_mode = DM_NORMAL;
                 break;
@@ -216,7 +235,7 @@ void do_colon(void *pfa) {
  */
 void do_constant(void *pfa) {
     // pfa is a pointer to the parameter field, so deref it to get the constant
-    PPUSH(*((cell *) pfa));
+    DPUSH(*((cell *) pfa));
 }
 
 /*
@@ -224,7 +243,7 @@ void do_constant(void *pfa) {
 */
 void do_variable(void *pfa) {
     // pfa is a pointer to the parameter field, so push its value (the address) as is
-    PPUSH((cell) pfa);
+    DPUSH((cell) pfa);
 }
 
 
@@ -293,7 +312,7 @@ READONLY (STATE,        interpreter_state,      0, readonly_DOCOLMODE);
 // ( a -- )
 PRIMITIVE ("DROP", 0, _DROP, readonly_STATE) {
     REG(a);
-    PPOP(a);
+    DPOP(a);
 }
 
 
@@ -302,10 +321,10 @@ PRIMITIVE ("SWAP", 0, _SWAP, _DROP) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(a);
-    PPUSH(b);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a);
+    DPUSH(b);
 }
 
 
@@ -313,35 +332,66 @@ PRIMITIVE ("SWAP", 0, _SWAP, _DROP) {
 PRIMITIVE ("DUP", 0, _DUP, _SWAP) {
     REG(a);
     
-    PTOP(a);
-    PPUSH(a);
+    DTOP(a);
+    DPUSH(a);
 }
 
 
-// ( b a -- a b )
+// ( b a -- b a b )
 PRIMITIVE ("OVER", 0, _OVER, _DUP) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PTOP(b);
-    PPUSH(a);
-    PPUSH(b);
+    DPOP(a);
+    DTOP(b);
+    DPUSH(a);
+    DPUSH(b);
+}
+
+
+// ( b a -- a b a )
+PRIMITIVE ("TUCK", 0, _TUCK, _OVER) {
+    REG(a);
+    REG(b);
+
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a);
+    DPUSH(b);
+    DPUSH(a);
+}
+
+
+// ( xu xu-1 .. x1 x0 u -- xu xu-1 .. x1 x0 xu )
+PRIMITIVE ("PICK", 0, _PICK, _TUCK) {
+    REG(u);
+
+    DPOP(u);
+    DPICK(u);
+}
+
+
+// ( xu xu-1 .. x1 x0 u -- xu-1 .. x1 x0 xu )
+PRIMITIVE ("ROLL", 0, _ROLL, _PICK) {
+    REG(u);
+
+    DPOP(u);
+    DROLL(u);
 }
 
 
 // ( c b a -- a c b )
-PRIMITIVE ("ROT", 0, _ROT, _OVER) {
+PRIMITIVE ("ROT", 0, _ROT, _ROLL) {
     REG(a);
     REG(b);
     REG(c);
 
-    PPOP(a);
-    PPOP(b);
-    PPOP(c);
-    PPUSH(a);
-    PPUSH(c);
-    PPUSH(b);
+    DPOP(a);
+    DPOP(b);
+    DPOP(c);
+    DPUSH(a);
+    DPUSH(c);
+    DPUSH(b);
 }
 
 
@@ -351,20 +401,20 @@ PRIMITIVE ("-ROT", 0, _negROT, _ROT) {
     REG(b);
     REG(c);
 
-    PPOP(a);
-    PPOP(b);
-    PPOP(c);
-    PPUSH(b);
-    PPUSH(a);
-    PPUSH(c);
+    DPOP(a);
+    DPOP(b);
+    DPOP(c);
+    DPUSH(b);
+    DPUSH(a);
+    DPUSH(c);
 }
 
 
 // ( b a -- )
 PRIMITIVE ("2DROP", 0, _2DROP, _negROT) {
     REG(a);
-    PPOP(a);
-    PPOP(a);
+    DPOP(a);
+    DPOP(a);
 }
 
 
@@ -373,11 +423,11 @@ PRIMITIVE ("2DUP", 0, _2DUP, _2DROP) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PTOP(b);
-    PPUSH(a);
-    PPUSH(b);
-    PPUSH(a);
+    DPOP(a);
+    DTOP(b);
+    DPUSH(a);
+    DPUSH(b);
+    DPUSH(a);
 }
 
 
@@ -386,11 +436,11 @@ PRIMITIVE ("NDUP", 0, _NDUP, _2DUP) {
     cell *buf;
     REG(n);
 
-    PPOP(n);
+    DPOP(n);
     if ((buf = malloc(n * sizeof(cell))) != NULL) {
-        for (register int i=0; i<n; i++)  PPOP(buf[i]);
-        for (register int i=0; i<n; i++)  PPUSH(buf[i]);
-        for (register int i=0; i<n; i++)  PPUSH(buf[i]);
+        for (register int i=0; i<n; i++)  DPOP(buf[i]);
+        for (register int i=n-1; i>=0; i--)  DPUSH(buf[i]);
+        for (register int i=n-1; i>=0; i--)  DPUSH(buf[i]);
         free(buf);
     }
     else {
@@ -407,15 +457,15 @@ PRIMITIVE ("2SWAP", 0, _2SWAP, _NDUP) {
     REG(c);
     REG(d);
 
-    PPOP(a);
-    PPOP(b);
-    PPOP(c);
-    PPOP(d);
+    DPOP(a);
+    DPOP(b);
+    DPOP(c);
+    DPOP(d);
 
-    PPUSH(b);
-    PPUSH(a);
-    PPUSH(d);
-    PPUSH(c);
+    DPUSH(b);
+    DPUSH(a);
+    DPUSH(d);
+    DPUSH(c);
 }
 
 
@@ -423,8 +473,8 @@ PRIMITIVE ("2SWAP", 0, _2SWAP, _NDUP) {
 PRIMITIVE ("?DUP", 0, _qDUP, _2SWAP) {
     REG(a);
 
-    PTOP(a);
-    if (a)  PPUSH(a);
+    DTOP(a);
+    if (a)  DPUSH(a);
 }
 
 
@@ -432,8 +482,8 @@ PRIMITIVE ("?DUP", 0, _qDUP, _2SWAP) {
 PRIMITIVE ("1+", 0, _1plus, _qDUP) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a + 1);
+    DPOP(a);
+    DPUSH(a + 1);
 }
 
 
@@ -441,8 +491,8 @@ PRIMITIVE ("1+", 0, _1plus, _qDUP) {
 PRIMITIVE ("1-", 0, _1minus, _1plus) {
     REG(a);
     
-    PPOP(a);
-    PPUSH(a - 1);
+    DPOP(a);
+    DPUSH(a - 1);
 }
 
 
@@ -450,8 +500,8 @@ PRIMITIVE ("1-", 0, _1minus, _1plus) {
 PRIMITIVE ("4+", 0, _4plus, _1minus) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a + 4);
+    DPOP(a);
+    DPUSH(a + 4);
 }
 
 
@@ -459,8 +509,8 @@ PRIMITIVE ("4+", 0, _4plus, _1minus) {
 PRIMITIVE ("4-", 0, _4minus, _4plus) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a - 4);
+    DPOP(a);
+    DPUSH(a - 4);
 }
 
 
@@ -469,9 +519,9 @@ PRIMITIVE ("+", 0, _plus, _4minus) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(a + b);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a + b);
 }
 
 
@@ -480,9 +530,9 @@ PRIMITIVE ("-", 0, _minus, _plus) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(b - a);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(b - a);
 }
 
 
@@ -491,9 +541,9 @@ PRIMITIVE ("*", 0, _multiply, _minus) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(a * b);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a * b);
 }
 
 
@@ -502,9 +552,9 @@ PRIMITIVE ("/", 0, _divide, _multiply) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(b / a);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(b / a);
 }
 
 
@@ -513,9 +563,9 @@ PRIMITIVE ("MOD", 0, _modulus, _divide) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(b % a);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(b % a);
 }
 
 
@@ -524,9 +574,9 @@ PRIMITIVE ("=", 0, _equals, _modulus) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(a == b);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a == b);
 }
 
 
@@ -535,9 +585,9 @@ PRIMITIVE ("<>", 0, _notequals, _equals) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(a != b);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a != b);
 }
 
 
@@ -546,9 +596,9 @@ PRIMITIVE ("<", 0, _lt, _notequals) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(b < a);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(b < a);
 }
 
 
@@ -557,9 +607,9 @@ PRIMITIVE (">", 0, _gt, _lt) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(b > a);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(b > a);
 }
 
 
@@ -568,9 +618,9 @@ PRIMITIVE ("<=", 0, _lte, _gt) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(b <= a);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(b <= a);
 }
 
 
@@ -579,9 +629,9 @@ PRIMITIVE (">=", 0, _gte, _lte) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(b >= a);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(b >= a);
 }
 
 
@@ -589,8 +639,8 @@ PRIMITIVE (">=", 0, _gte, _lte) {
 PRIMITIVE ("0=", 0, _zero_equals, _gte) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a == 0);
+    DPOP(a);
+    DPUSH(a == 0);
 }
 
 
@@ -598,8 +648,8 @@ PRIMITIVE ("0=", 0, _zero_equals, _gte) {
 PRIMITIVE ("0<>", 0, _notzero_equals, _zero_equals) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a != 0);
+    DPOP(a);
+    DPUSH(a != 0);
 }
 
 
@@ -607,8 +657,8 @@ PRIMITIVE ("0<>", 0, _notzero_equals, _zero_equals) {
 PRIMITIVE ("0<", 0, _zero_lt, _notzero_equals) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a < 0);
+    DPOP(a);
+    DPUSH(a < 0);
 }
 
 
@@ -616,8 +666,8 @@ PRIMITIVE ("0<", 0, _zero_lt, _notzero_equals) {
 PRIMITIVE ("0>", 0, _zero_gt, _zero_lt) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a > 0);
+    DPOP(a);
+    DPUSH(a > 0);
 }
 
 
@@ -625,8 +675,8 @@ PRIMITIVE ("0>", 0, _zero_gt, _zero_lt) {
 PRIMITIVE ("0<=", 0, _zero_lte, _zero_gt) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a <= 0);
+    DPOP(a);
+    DPUSH(a <= 0);
 }
 
 
@@ -634,8 +684,8 @@ PRIMITIVE ("0<=", 0, _zero_lte, _zero_gt) {
 PRIMITIVE ("0>=", 0, _zero_gte, _zero_lte) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a >= 0);
+    DPOP(a);
+    DPUSH(a >= 0);
 }
 
 
@@ -644,9 +694,9 @@ PRIMITIVE ("AND", 0, _AND, _zero_gte) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(a & b);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a & b);
 }
 
 
@@ -655,9 +705,9 @@ PRIMITIVE ("OR", 0, _OR, _AND) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(a | b);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a | b);
 }
 
 
@@ -666,9 +716,9 @@ PRIMITIVE ("XOR", 0, _XOR, _OR) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
-    PPUSH(a ^ b);
+    DPOP(a);
+    DPOP(b);
+    DPUSH(a ^ b);
 }
 
 
@@ -676,34 +726,34 @@ PRIMITIVE ("XOR", 0, _XOR, _OR) {
 PRIMITIVE ("INVERT", 0, _INVERT, _XOR) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(~a);
+    DPOP(a);
+    DPUSH(~a);
 }
 
 
 /* Memory access primitives */
 
 
-// ( value addr -- )
+// ( a addr -- )
 PRIMITIVE ("!", 0, _store, _INVERT) {
+    REG(addr);
     REG(a);
-    REG(b);
 
-    PPOP(a);
-    PPOP(b);
+    DPOP(addr);
+    DPOP(a);
 
-    *((cell *) a) = b;
+    *(cell *) addr = a;
 }
 
 
-// ( addr -- value )
+// ( addr -- a )
 PRIMITIVE ("@", 0, _fetch, _store) {
+    REG(addr);
     REG(a);
-    REG(b);
 
-    PPOP(a);
-    b = *((cell *) a);
-    PPUSH(b);
+    DPOP(addr);
+    a = *(cell *) addr;
+    DPUSH(a);
 }
 
 
@@ -712,8 +762,8 @@ PRIMITIVE ("+!", 0, _addstore, _fetch) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
+    DPOP(a);
+    DPOP(b);
     *((cell*) a) += b;
 }
 
@@ -723,8 +773,8 @@ PRIMITIVE ("-!", 0, _substore, _addstore) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
+    DPOP(a);
+    DPOP(b);
     *((cell*) a) -= b;
 }
 
@@ -734,8 +784,8 @@ PRIMITIVE ("C!", 0, _storebyte, _substore) {
     REG(a);
     REG(b);
 
-    PPOP(a);
-    PPOP(b);
+    DPOP(a);
+    DPOP(b);
     *((char*) a) = (char) (b & 0xFF);
 }
 
@@ -745,9 +795,9 @@ PRIMITIVE ("C@", 0, _fetchbyte, _storebyte) {
     REG(a);
     REG(b);
 
-    PPOP(a);
+    DPOP(a);
     b = *((char*) a);
-    PPUSH(b);
+    DPUSH(b);
 }
 
 
@@ -756,11 +806,11 @@ PRIMITIVE ("C@C!", 0, _ccopy, _fetchbyte) {
     REG(src);
     REG(dest);
 
-    PPOP(dest);
-    PPOP(src);
+    DPOP(dest);
+    DPOP(src);
     *(char *) dest = *(const char *) src;
-    PPUSH(src+1);
-    PPUSH(dest+1);
+    DPUSH(src+1);
+    DPUSH(dest+1);
 }
 
 
@@ -770,12 +820,21 @@ PRIMITIVE ("CMOVE", 0, _cmove, _ccopy) {
     REG(b);
     REG(c);
 
-    PPOP(a);  // len
-    PPOP(b);  // dest
-    PPOP(c);  // src
+    DPOP(a);  // len
+    DPOP(b);  // dest
+    DPOP(c);  // src
 
     // memmove(dest, src, len);
     memmove((void*) b, (void*) c, a);
+}
+
+
+// ( n -- )
+PRIMITIVE ("ALLOT", 0, _ALLOT, _cmove) {
+    REG(n);
+
+    DPOP(n);
+    *var_HERE += n;
 }
 
 
@@ -785,10 +844,10 @@ PRIMITIVE ("CMOVE", 0, _cmove, _ccopy) {
 //not place there using >R or 2>R;
 
 // ( a -- ) ( R: -- a )
-PRIMITIVE (">R", F_NOINTERP, _ltR, _cmove) {
+PRIMITIVE (">R", F_NOINTERP, _ltR, _ALLOT) {
     REG(a);
 
-    PPOP(a);
+    DPOP(a);
     RPUSH(a);
 }
 
@@ -798,8 +857,8 @@ PRIMITIVE ("2>R", F_NOINTERP, _2ltR, _ltR) {
     REG(a);
     REG(b);
 
-    PPOP(b);
-    PPOP(a);
+    DPOP(b);
+    DPOP(a);
     RPUSH(a);
     RPUSH(b);
 }
@@ -810,7 +869,7 @@ PRIMITIVE ("R>", F_NOINTERP, _Rgt, _2ltR) {
     REG(a);
 
     RPOP(a);
-    PPUSH(a);
+    DPUSH(a);
 }
 
 
@@ -821,8 +880,8 @@ PRIMITIVE ("2R>", F_NOINTERP, _2Rgt, _Rgt) {
 
     RPOP(b);
     RPOP(a);
-    PPUSH(a);
-    PPUSH(b);
+    DPUSH(a);
+    DPUSH(b);
 }
 
 
@@ -831,7 +890,7 @@ PRIMITIVE ("R@", F_NOINTERP, _Rat, _2Rgt) {
     REG(a);
 
     RTOP(a);
-    PPUSH(a);
+    DPUSH(a);
 }
 
 
@@ -843,65 +902,67 @@ PRIMITIVE ("2R@", F_NOINTERP, _2Rat, _Rat) {
     RPOP(b);
     RTOP(a);
     RPUSH(b);
-    PPUSH(a);
-    PPUSH(b);
+    DPUSH(a);
+    DPUSH(b);
 }
 
 
 /* Debug stuff */
 
-
 // ( n*a n*b n -- n*a )
-PRIMITIVE ("ASSERT",  0, _ASSERT, _2Rat) {
-    int err = 0;
-    new_cell *buf;
-    register new_cell n;
+PRIMITIVE ("ASSERT", 0, _ASSERT, _2Rat) {
+    REG(n);
 
-    PPOP(n.u);
+    DPOP(n);
+    // FIXME don't flip out on negative input
 
-    if (stack_count(&parameter_stack) >= 2 * n.u) {
-        if ((buf = malloc (2 * n.u * sizeof(cell))) != NULL) {
-            for (int i = 0; i < 2 * n.u; i++) {
-                PPOP(buf[i].u);
-            }
-            
-            for (int i = 0; i < n.u; i++) {
-                if (buf[i].u != buf[i + n.u].u)  err++;   
-            }
-
-            if (err) {
-                printf("ASSERT %"PRIuPTR" failed:\nExpected: ", n.u);
-                for (int i = n.u - 1; i >= 0; i--) {
-                    printf("%"PRIuPTR" ", buf[i].u);
-                }
-                printf("\nFound: ");
-                for (int i = 2*n.u - 1; i >= n.u; i--) {
-                    printf ("%"PRIuPTR" ", buf[i].u);
-                }
-                printf("\n");
-                _ABORT(NULL);
-            }
-            else {
-                printf("ASSERT passed\n");
-                for (int i = 2 * n.u - 1; i >= n.u; i--) {
-                    PPUSH(buf[i].u);
-                }
-            }
-
-            free (buf);
+    if (stack_count(&data_stack) >= 2 * n) {
+        cell *orig = &data_stack.values[1 + data_stack.index - 2 * n];
+        cell *dup  = &data_stack.values[1 + data_stack.index - n];
+        if (memcmp(orig, dup, n * sizeof(cell)) == 0) {
+            puts("ASSERT passed");
         }
         else {
-            // Couldn't allocate memory?!
-            fprintf(stderr, "malloc for %"PRIuPTR" cells failed in ASSERT\n", 2 * n.u);
-            _ABORT(NULL);
+            printf("ASSERT %"PRIuPTR" failed:\n", n);
+            int i;
+            for (i=0; i < n; i++) {
+                if (i % 8 == 0)  printf("expected> ");
+                printf("%"PRIiPTR", ", dup[i]);
+                if (i % 8 == 7)  putchar('\n');
+            }
+            if (i % 8 != 0)  putchar('\n');
+            for (i=0; i < n; i++) {
+                if (i % 8 == 0)  printf("found> ");
+                printf("%"PRIiPTR", ", orig[i]);
+                if (i % 8 == 7)  putchar('\n');
+            }
+            if (i % 8 != 0)  putchar('\n');
         }
+        data_stack.index -= n;
     }
     else {
         // stack would underflow!
         fprintf(stderr, "ASSERT: Not enough elements on stack "
-                        "(requested: 2 * %"PRIuPTR", found %"PRIuPTR")\n",
-                        n.u, stack_count(&parameter_stack));
+                        "(expected %"PRIuPTR", found %"PRIuPTR")\n",
+                        2 * n, stack_count(&data_stack));
         _ABORT(NULL);
+    }
+}
+
+
+// ( -- )
+PRIMITIVE ("SHOWSTACK", 0, _SHOWSTACK, _ASSERT) {
+    if (stack_count(&data_stack) == 0) {
+        puts("(empty)");
+    }
+    else {
+        register int i;
+        for (i = 0; i < stack_count(&data_stack); i++) {
+            if (i % 8 == 0)  printf("stack> ");
+            printf("%"PRIiPTR", ", data_stack.values[i]);
+            if (i % 8 == 7)  putchar('\n');
+        }
+        if (i % 8 != 0)  putchar('\n');  // if the last number didn't just print one out itself
     }
 }
 
@@ -909,12 +970,13 @@ PRIMITIVE ("ASSERT",  0, _ASSERT, _2Rat) {
 /* Other stuff */
 
 // ( -- char )
-PRIMITIVE ("KEY", 0, _KEY, _ASSERT) {
+PRIMITIVE ("KEY", 0, _KEY, _SHOWSTACK) {
     REG(a);
 
     /* stdio is line buffered when attached to terminals :) */
     if ((a = fgetc(stdin)) != EOF) {
-        PPUSH(a);
+        DPUSH(a);
+//        if (a == '\n')  puts(" ok");
     }
     else if (feof(stdin))  exit(0);
     else  exit(1);
@@ -925,12 +987,12 @@ PRIMITIVE ("KEY", 0, _KEY, _ASSERT) {
 PRIMITIVE ("EMIT", 0, _EMIT, _KEY) {
     REG(a);
 
-    PPOP(a);
+    DPOP(a);
     fputc(a, stdout);
 }
 
 
-// ( delim -- c-addr len )
+// ( delim -- c-addr )
 PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
     static int usebuf = 0;  // Double-buffered
     static CountedString buf[2];
@@ -943,13 +1005,13 @@ PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
     memset(buf[usebuf].value, 0, sizeof(buf[usebuf].value));
 
     /* Get the delimiter */
-    PPOP(delim);
+    DPOP(delim);
     blflag = (delim == ' ');  // Treat control chars as whitespace when delim is space
 
     /* First skip leading delimiters */
     do {
         _KEY(NULL);
-        PPOP(key);
+        DPOP(key);
         if (blflag && key < ' ')  key = delim;
     } while (key == delim);
 
@@ -958,45 +1020,45 @@ PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
     do {
         buf[usebuf].value[i++] = key;
         _KEY(NULL);
-        PPOP(key);
+        DPOP(key);
         if (blflag && key < ' ')  key = delim;
     } while (i < MAX_COUNTED_STRING_LENGTH && key != delim);
 
     /* Return address and length on the stack */
     if (i < MAX_COUNTED_STRING_LENGTH) {
         buf[usebuf].length = i;
-        PPUSH((cell) buf[usebuf].value);
-        PPUSH(i);
+//        DPUSH((cell) buf[usebuf].value);
+//        DPUSH(i);
+        DPUSH((cell) &buf[usebuf]);
         usebuf = (usebuf == 0 ? 1 : 0);
     }
     else {
         // Ran out of room, return some kind of error
         // Don't flip the buffers
         // FIXME anything else?
-        PPUSH(0);
+        DPUSH(0);
     }
 }
 
 
-// ( addr len -- value remainder )
+// ( c-addr -- n status )
 PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
-    char buf[MAX_WORD_LEN + 1];
+    CountedString *word;
     char *endptr;
     REG(a);
-    REG(b);
 
-    memset(buf, 0, MAX_WORD_LEN + 1);
-
-    PPOP(a);  // len
-    PPOP(b);  // addr
-
-    memcpy(buf, (const char *) b, a);
-
-    a = strtol(buf, &endptr, *var_BASE);    // value parsed
-    b = strlen(buf) - (endptr - buf);       // number of chars left unparsed
-
-    PPUSH(a);
-    PPUSH(b);
+    DPOP(a);
+    word = (CountedString *) a;
+    if (word) {
+        a = strtol(word->value, &endptr, *var_BASE);
+        DPUSH(a);   // value
+        a = word->value + word->length - endptr;
+        DPUSH(a);   // number of chars left unparsed
+    }
+    else {
+        DPUSH(0);   // value
+        DPUSH(-1);  // negative status means parse failed
+    }
 }
 
 
@@ -1015,8 +1077,8 @@ PRIMITIVE ("U.R", 0, _UdotR, _NUMBER) {
 
     memset(buf, 0, sizeof(buf));
     i = 32; // Start at end of string
-    PPOP(minlen);
-    PPOP(a.u);
+    DPOP(minlen);
+    DPOP(a.u);
     do {
         buf[--i] = charset[a.u % base.u];
         a.u /= base.u;
@@ -1040,8 +1102,8 @@ PRIMITIVE (".R", 0, _dotR, _UdotR) {
 
     memset(buf, 0, sizeof(buf));
     i = 33; // Start at end of string
-    PPOP(minlen);
-    PPOP(a);
+    DPOP(minlen);
+    DPOP(a);
     neg = (a < 0);
     a = abs(a);  // FIXME when a == INTPTR_MIN, abs() will not work
     do {
@@ -1054,22 +1116,20 @@ PRIMITIVE (".R", 0, _dotR, _UdotR) {
 }
 
 
-// ( addr len -- addr )
+// ( c-addr -- addr )
 PRIMITIVE ("FIND", 0, _FIND, _dotR) {
-    char *word;
-    size_t len;
     REG(a);
 
-    PPOP(len);
-    PPOP(a);
-    word = (char *) a;
+    DPOP(a);
+    CountedString *word = (CountedString *) a;
 
-    DictEntry *de = (DictEntry *) *var_LATEST;
+    DictEntry *de = *(DictEntry **) var_LATEST;
     DictEntry *result = NULL;
 
     while (de != &_dict___ROOT) {
-        if (len == (de->name_length & (F_HIDDEN | F_LENMASK))) { // tricky - ignores hidden words
-            if (strncmp(word, de->name, len) == 0) {
+        // tricky - ignores hidden words
+        if (word->length == (de->name_length & (F_HIDDEN | F_LENMASK))) { 
+            if (strncmp(word->value, de->name, word->length) == 0) {
                 // found a match
                 result = de;
                 break;
@@ -1078,57 +1138,80 @@ PRIMITIVE ("FIND", 0, _FIND, _dotR) {
         de = de->link;
     }
 
-    PPUSH((cell) result);
+    DPUSH((cell) result);
 }
 
 
-// ( addr -- cfa )
-PRIMITIVE (">CFA", 0, _toCFA, _FIND) {
+// ( addr -- addr )
+PRIMITIVE ("DE>CFA", 0, _DEtoCFA, _FIND) {
     REG(a);
 
-    PPOP(a);
-    PPUSH((cell) DE_to_CFA(a));
+    DPOP(a);
+    DPUSH((cell) DE_to_CFA(a));
 }
 
 
-// ( addr -- dfa )
-PRIMITIVE (">DFA", 0, _toDFA, _toCFA) {
+// ( addr -- addr )
+PRIMITIVE ("DE>DFA", 0, _DEtoDFA, _DEtoCFA) {
     REG(a);
 
-    PPOP(a);
-    PPUSH((cell) DE_to_DFA(a));
+    DPOP(a);
+    DPUSH((cell) DE_to_DFA(a));
+}
+
+
+// ( addr -- addr )
+PRIMITIVE ("DFA>DE", 0, _DFAtoDE, _DEtoDFA) {
+    REG(a);
+
+    DPOP(a);
+    DPUSH((cell) DFA_to_DE(a));
+}
+
+
+// ( addr -- addr )
+PRIMITIVE ("DFA>CFA", 0, _DFAtoCFA, _DFAtoDE) {
+    REG(a);
+
+    DPOP(a);
+    DPUSH((cell) DFA_to_CFA(a));
 }
 
 
 // ( -- )
-PRIMITIVE ("LIT", 0, _LIT, _toDFA) {
+PRIMITIVE ("LIT", 0, _LIT, _DFAtoCFA) {
     docolon_mode = DM_LITERAL;
 }
 
 
-// ( addr len -- )
+// ( -- addr )
 PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
-    cell name_length;
-    cell name_addr;
-    DictHeader *new_header;
+    DictHeader2 *new_header;
+    REG(a);
+    CountedString *name;
 
-    PPOP(name_length);
-    PPOP(name_addr);
-    
-    // clip the length to within range
-    name_length = ((name_length > MAX_WORD_LEN) ? MAX_WORD_LEN : name_length);
+    // Parse a space-delimited name from input
+    DPUSH(' ');
+    _WORD(NULL);
+    DPOP(a);
+    name = (CountedString *) a;
 
-    // set up the new entry
-    new_header = *(DictHeader **)var_HERE;
-    memset(new_header, 0, sizeof(DictHeader));
-    new_header->link = *(DictEntry**)var_LATEST;
-    new_header->name_length = name_length;
-    strncpy(new_header->name, (const char *) name_addr, name_length);
+    // Initialise a DictHeader for it
+    a = CELLALIGN(*var_HERE);
+    new_header = (DictHeader2 *) a;
+    memset(new_header, 0, sizeof(DictHeader2));
+    new_header->link = *(DictEntry **) var_LATEST;
+    new_header->flags = name->length & F_LENMASK;
+    strncpy(new_header->name, name->value, new_header->flags);
     new_header->sentinel = SENTINEL;
+    new_header->code = &do_variable;
 
-    // update HERE and LATEST
+    // Update LATEST and HERE
     *var_LATEST = (cell) new_header;
-    *var_HERE = (cell) new_header + sizeof(DictHeader);
+    *var_HERE = (cell) DE_to_DFA(new_header);
+
+    // Push DFA
+    DPUSH(*var_HERE);
 }
 
 
@@ -1136,7 +1219,7 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
 PRIMITIVE (",", 0, _comma, _CREATE) {
     REG(a);
 
-    PPOP(a);
+    DPOP(a);
     **(cell**)var_HERE = a;
     *var_HERE += sizeof(cell);
     // FIXME is this right?
@@ -1157,12 +1240,13 @@ PRIMITIVE ("]", 0, _rbrac, _lbrac) {
 
 // ( -- )
 PRIMITIVE (":", 0, _colon, _rbrac) {
-    PPUSH(' ');
-    _WORD(NULL);
+    REG(a);
+
     _CREATE(NULL);
-    PPUSH(*const_DOCOL);
-    _comma(NULL);
-    PPUSH(*var_LATEST);
+    DPOP(a);
+    a = (cell) DFA_to_CFA(a);
+    *(pvf *) a = *(pvf *) const_DOCOL;
+    DPUSH(*var_LATEST);
     _HIDDEN(NULL);
     _rbrac(NULL);
 }
@@ -1170,9 +1254,9 @@ PRIMITIVE (":", 0, _colon, _rbrac) {
 
 // ( -- )
 PRIMITIVE (";", F_IMMED | F_NOINTERP, _semicolon, _colon) {
-    PPUSH(*const_EXIT); // FIXME i think this is wrong
+    DPUSH(*const_EXIT); // FIXME i think this is wrong. XXX ok it's mostly fine, just tricky.
     _comma(NULL);
-    PPUSH(*var_LATEST);
+    DPUSH(*var_LATEST);
     _HIDDEN(NULL);
     _lbrac(NULL);
 }
@@ -1198,7 +1282,7 @@ PRIMITIVE ("NOINTERPRET", F_IMMED, _NOINTERP, _IMMEDIATE) {
 PRIMITIVE ("HIDDEN", 0, _HIDDEN, _NOINTERP) {
     REG(a);
 
-    PPOP(a);
+    DPOP(a);
 
     ((DictEntry*) a)->name_length ^= F_HIDDEN;
 }
@@ -1206,7 +1290,7 @@ PRIMITIVE ("HIDDEN", 0, _HIDDEN, _NOINTERP) {
 
 // ( -- )
 PRIMITIVE ("HIDE", 0, _HIDE, _HIDDEN) {
-    PPUSH(' ');
+    DPUSH(' ');
     _WORD(NULL);
     _FIND(NULL);
     _HIDDEN(NULL);
@@ -1215,10 +1299,10 @@ PRIMITIVE ("HIDE", 0, _HIDE, _HIDDEN) {
 
 // ( -- )
 PRIMITIVE ("'", 0, _tick, _HIDE) {
-    PPUSH(' ');
+    DPUSH(' ');
     _WORD(NULL);
     _FIND(NULL);
-    _toCFA(NULL);
+    _DEtoCFA(NULL);
 }
 
 
@@ -1232,7 +1316,7 @@ PRIMITIVE ("BRANCH", 0, _BRANCH, _tick) {
 PRIMITIVE ("0BRANCH", 0, _0BRANCH, _BRANCH) {
     REG(a);
 
-    PPOP(a);
+    DPOP(a);
     if (a == 0)  docolon_mode = DM_BRANCH;
     else         docolon_mode = DM_SKIP;
 }
@@ -1249,8 +1333,8 @@ PRIMITIVE ("TELL", 0, _TELL, _LITSTRING) {
     REG(a);
     REG(b);
 
-    PPOP(a);  // len
-    PPOP(b);  // addr
+    DPOP(a);  // len
+    DPOP(b);  // addr
     while (a--) {
         putchar(*(char *)(b++));
     }
@@ -1262,7 +1346,7 @@ PRIMITIVE ("UGROW", 0, _UGROW, _TELL) {
     REG(a);
 
     a = mem_grow(*var_UINCR);
-    PPUSH(a);
+    DPUSH(a);
 }
 
 
@@ -1270,18 +1354,18 @@ PRIMITIVE ("UGROW", 0, _UGROW, _TELL) {
 PRIMITIVE ("UGROWN", 0, _UGROWN, _UGROW) {
     REG(a);
 
-    PPOP(a);
+    DPOP(a);
     a = mem_grow(a);
-    PPUSH(a);
+    DPUSH(a);
 }
 
 // ( ncells -- status )
 PRIMITIVE ("USHRINK", 0, _USHRINK, _UGROWN) {
     REG(a);
 
-    PPOP(a);
+    DPOP(a);
     a = mem_shrink(a);
-    PPUSH(a);
+    DPUSH(a);
 }
 
 
@@ -1302,8 +1386,8 @@ PRIMITIVE ("ABORT", 0, _ABORT, _QUIT) {
 PRIMITIVE ("breakpoint", F_IMMED, _breakpoint, _ABORT) {
     REG(a);
 
-    PPUSH(1);
-    PPOP(a);
+    DPUSH(1);
+    DPOP(a);
 }
 
 
@@ -1311,8 +1395,8 @@ PRIMITIVE ("breakpoint", F_IMMED, _breakpoint, _ABORT) {
 PRIMITIVE ("CELLS", 0, _CELLS, _breakpoint) {
     REG(a);
 
-    PPOP(a);
-    PPUSH(a * sizeof(cell));
+    DPOP(a);
+    DPUSH(a * sizeof(cell));
 }
 
 
@@ -1321,9 +1405,9 @@ PRIMITIVE ("/CELLS", 0, _divCELLS, _CELLS) {
     REG(a);
     REG(b);
 
-    PPOP(a);
+    DPOP(a);
     b = sizeof(cell);  // wtf, why do I need to do it this way?
-    PPUSH(a / b);
+    DPUSH(a / b);
 }
 
 
@@ -1331,7 +1415,7 @@ PRIMITIVE ("/CELLS", 0, _divCELLS, _CELLS) {
 PRIMITIVE ("EXECUTE", 0, _EXECUTE, _divCELLS) {
     REG(xt);
 
-    PPOP(xt);
+    DPOP(xt);
     do_execute((pvf*) xt, (cell*) xt + 1);
 }
 

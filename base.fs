@@ -1,3 +1,4 @@
+: \ IMMEDIATE 10 WORD DROP ;
 : CR 10 EMIT ;
 : TAB 9 EMIT ;
 : SPACE 32 EMIT ;
@@ -14,13 +15,40 @@
     [ ' BRANCH ] LITERAL , HERE @ 0 , SWAP DUP HERE @ SWAP - /CELLS SWAP ! 
 ;
 : <=> 2DUP < IF -1 ELSE > IF 1 ELSE 0 THEN THEN ;
-: CHAR 32 WORD DROP C@ ;
+: CHAR 32 WORD 1+ C@ ;
 : BEGIN IMMEDIATE NOINTERPRET HERE @ ;
 : UNTIL IMMEDIATE NOINTERPRET [ ' 0BRANCH ] LITERAL , HERE @ - /CELLS , ;
 : AGAIN IMMEDIATE NOINTERPRET [ ' BRANCH ] LITERAL , HERE @ - /CELLS , ;
 : WHILE IMMEDIATE NOINTERPRET [ ' 0BRANCH ] LITERAL , HERE @ 0 , ;
 : REPEAT IMMEDIATE NOINTERPRET 
     [ ' BRANCH ] LITERAL , SWAP HERE @ - /CELLS , DUP HERE @ SWAP - /CELLS SWAP ! 
+;
+: ( IMMEDIATE
+    DEC 1           \  count
+    BEGIN           \  
+        KEY         \  count key
+        DUP         \  count key key
+        40          \  count key key '('
+        =           \  count key lflag
+        -ROT        \  key lflag count
+        +           \  key count+?
+        SWAP        \  count key
+        41          \  count key ')'
+        =           \  count kflag
+\         DUP         \  count kflag kflag
+\         -ROT        \  kflag kflag count
+\         SWAP        \  kflag count kflag
+        TUCK        \  kflag count kflag
+        -           \  kflag count-?
+\         SWAP        \  count kflag
+\         OVER        \  count kflag count
+        TUCK        \  count kflag count
+        0=          \  count kflag cflag
+        +           \  count kcflag
+        2           \  count kcflag 2
+        =           \  count loopflag
+    UNTIL
+    DROP            \ drop count
 ;
 : ALIGNED 3 + 3 INVERT AND ;
 : ALIGN HERE @ ALIGNED HERE ! ;
@@ -38,8 +66,7 @@
     ALIGN
     [ ' TELL ] LITERAL ,
 ;
-: CONSTANT IMMEDIATE 32 WORD CREATE DOCON , , ;
-: VARIABLE IMMEDIATE 32 WORD CREATE DOVAR , 0 , ;
+: VARIABLE CREATE 1 CELLS ALLOT ;
+: CONSTANT CREATE DFA>CFA DOCON SWAP !  , ;
 : EXIT IMMEDIATE NOINTERPRET 0 , ;
-: \ IMMEDIATE 10 WORD 2DROP ;
 DEC 32 CONSTANT BL

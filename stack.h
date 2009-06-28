@@ -32,4 +32,19 @@ static inline cell stack_count (const Stack *stack) {
     return stack->index + 1;
 }
 
+static inline void stack_pick (Stack *stack, unsigned int n) {
+    // FIXME error checking
+    stack->values[stack->index + 1] = stack->values[stack->index - n];
+    ++ stack->index;
+}
+
+static inline void stack_roll (Stack *stack, unsigned int n) {
+    // FIXME error checking
+    register cell a = stack->values[stack->index - n];
+    memmove(&stack->values[stack->index - n],       // dst
+            &stack->values[1 + stack->index - n],   // src
+            n * sizeof(cell));                      // len
+    stack->values[stack->index] = a;
+}
+
 #endif

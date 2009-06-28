@@ -6,7 +6,7 @@
 
 DictDebug junk;  // Make sure DictDebug symbol gets compiled in
 
-Stack               parameter_stack;
+Stack               data_stack;
 Stack               return_stack;
 Stack               control_stack;
 
@@ -28,17 +28,27 @@ int main (int argc, char **argv) {
     // i don't have my own return stack
 
     // ABORT jumps to here
-    setjmp(cold_boot); 
+    if (setjmp(cold_boot) != 0) {
+        // If we get here via ABORT, discard the rest of the current input line
+        int c;
+        for (c = fgetc(stdin); c != EOF && c != '\n'; c = fgetc(stdin)) ;
+        if (c == EOF)  exit(feof(stdin) ? 0 : 1);
+    }
 
     interpreter_state = S_INTERPRET;
     docolon_mode = DM_NORMAL;
-    stack_init(&parameter_stack);
+    stack_init(&data_stack);
     mem_init();
     *var_BASE = 0;
     *var_LATEST = (cell) &_dict_var_LATEST;
 
     // QUIT jumps to here
-    setjmp(warm_boot);
+    if (setjmp(warm_boot) != 0) {
+        // If we get here via QUIT, discard the rest of the current input line
+        int c;
+        for (c = fgetc(stdin); c != EOF && c != '\n'; c = fgetc(stdin)) ;
+        if (c == EOF)  exit(feof(stdin) ? 0 : 1);
+    }
     stack_init(&return_stack);
 
     switch (error_state) {

@@ -101,6 +101,17 @@ int mem_shouldgrow () {
 }
 
 
+int mem_canshrink () {
+    size_t used_cells = (*(cell**)var_HERE - mem_start) / sizeof(cell);
+    if (used_cells < mem_ncells - *var_UTHRES) {
+        return 1;
+    }
+    else {
+        return 0;
+    }
+}
+
+
 // You would normally call this with ncells = *var_UINCR
 int mem_grow (size_t ncells) {
     cell *new_mem_start;

@@ -5,6 +5,7 @@
 void mem_init ();
 void mem_destroy ();
 int  mem_shouldgrow ();
+int  mem_canshrink ();
 int  mem_grow (size_t ncells);
 int  mem_shrink (size_t ncells);
 cell *mem_get_start ();

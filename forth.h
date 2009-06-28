@@ -26,7 +26,16 @@ typedef struct _dict_header {
     uint8_t     name_length;
     char        name[MAX_WORD_LEN];
     uint32_t    sentinel;
+//    pvf         code;     // FIXME this should really be here once CREATE is fixed
 } DictHeader;
+
+typedef struct _dict_header2 {
+    struct _dict_entry *link;
+    uint8_t     flags;
+    char        name[MAX_WORD_LEN];
+    uint32_t    sentinel;
+    pvf         code;
+} DictHeader2;
 
 typedef struct _dict_entry {
     struct _dict_entry *link;
@@ -37,13 +46,16 @@ typedef struct _dict_entry {
     cell        param[];
 } DictEntry;
 
-#define DE_to_CFA(de)   (pvf*)(((void*)(de)) + offsetof(struct _dict_entry, code))
-#define DE_to_DFA(de)   (cell*)(((void*)(de)) + offsetof(struct _dict_entry, param))
-#define XT_to_DE(xt)    (DictEntry*)(((void*)(xt)) - offsetof(struct _dict_entry, code))
+#define DE_to_CFA(DE)   (pvf*)(((void*)(DE)) + offsetof(struct _dict_entry, code))
+#define DE_to_DFA(DE)   (cell*)(((void*)(DE)) + offsetof(struct _dict_entry, param))
+#define XT_to_DE(XT)    (DictEntry*)(((void*)(XT)) - offsetof(struct _dict_entry, code))
+#define CFA_to_DE(CFA)  XT_to_DE(CFA)
+#define DFA_to_DE(DFA)  (DictEntry*)(((void*)(DFA)) - offsetof(struct _dict_entry, param))
+#define DFA_to_CFA(DFA) DE_to_CFA(DFA_to_DE(DFA))
 
 typedef struct _dict_debug {
     DictHeader  header;
-    pvf         code;
+    pvf         code;   // FIXME should really be part of the header
     cell        param[40];
 } DictDebug;
 
@@ -79,7 +91,7 @@ typedef enum {
     E_PARSE = 1,
 } Error;
 
-extern Stack    parameter_stack;
+extern Stack    data_stack;
 extern Stack    return_stack;
 extern Stack    control_stack;
 

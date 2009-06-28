@@ -1,17 +1,14 @@
 * work out how to make a prompt work
 * convert everything to use new_cell and rename it to cell
-* add other stacks -- return, control -- and primitives to work with them etc
+* add primitives for control stack
 * implement if/else/then to also work in interp mode -- see [IF] etc in spec
 * maybe add another flag to say "is only available in compilation state" and add it to such
   words like IF etc that are meaningless in interpreted mode and possibly have edge cases.
   then make do_colon check the flag before trying to run them and if they shouldn't be run
-  then just no-op (and maybe print a warning)
-* my CREATE is wrong -- it's supposed to call WORD itself, not expect to find the result of WORD
-  already on the stack
-* my WORD is still wrong -- it's supposed to just return a counted string address, no length lol
-* my FIND is wrong -- should take a counted string, return xt and a flag for immediacy (see spec)
-* debug primitives -- SHOWSTACK, SEE, ASSERT, etc
+  then just no-op (and maybe print a warning)  <- sorta done, but needs more thought
+* debug primitives -- SEE, DUMP, etc
 * proper test suite built around ASSERT
+* don't like my NDUP or ASSERT implementations -- rewrite (use user memory?)
 
 
 
