@@ -417,8 +417,19 @@ PRIMITIVE ("2DROP", 0, _2DROP, _negROT) {
 }
 
 
+// ( n*a n -- )
+PRIMITIVE ("NDROP", 0, _NDROP, _2DROP) {
+    REG(n);
+
+    DPOP(n);
+    n = data_stack.index - n;
+    n = (n >= -1 ? n : -1);
+    data_stack.index = n;
+}
+
+
 // ( b a -- b a b a )
-PRIMITIVE ("2DUP", 0, _2DUP, _2DROP) {
+PRIMITIVE ("2DUP", 0, _2DUP, _NDROP) {
     REG(a);
     REG(b);
 
@@ -1327,7 +1338,7 @@ PRIMITIVE ("LITSTRING", 0, _LITSTRING, _0BRANCH) {
 }
 
 
-// ( -- )
+// ( addr len -- )
 PRIMITIVE ("TELL", 0, _TELL, _LITSTRING) {
     REG(a);
     REG(b);

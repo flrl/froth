@@ -8,7 +8,7 @@
   then just no-op (and maybe print a warning)  <- sorta done, but needs more thought
 * debug primitives -- SEE, DUMP, etc
 * proper test suite built around ASSERT
-* don't like my NDUP or ASSERT implementations -- rewrite (use user memory?)
+
 
 
 
