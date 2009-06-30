@@ -71,3 +71,53 @@
 : EXIT IMMEDIATE NOINTERPRET 0 , ;
 DEC 32 CONSTANT BL
 : COUNT DUP 1+ SWAP C@ ;
+: CTELL COUNT TELL ;
+: SPACES BEGIN DUP 0> WHILE SPACE 1- REPEAT DROP ;
+
+\ decompiler!
+: XT-NAME 9 CELLS - COUNT ;
+: CCOUNT DUP 1 CELLS + SWAP @ ;
+: SEE
+    BL WORD FIND
+    DUP 0= IF ." (not found)" CR DROP EXIT THEN \ bail out if the word is not found
+    DUP DE>CFA @ DOCOL <> IF ." (native)" CR DROP EXIT THEN \ if it's not a colon word, print native
+    DE>DFA BEGIN
+        DUP @ DUP 0<>
+    WHILE
+        DUP [ ' LIT ] LITERAL = IF           
+            DROP \ LIT
+            TAB ." LIT "
+            1 CELLS +
+            DUP @ . CR
+        ELSE
+            DUP [ ' LITSTRING ] LITERAL = IF
+                DROP \ LITSTRING
+                TAB ." LITSTRING " 34 EMIT
+                1 CELLS +
+                DUP CCOUNT TUCK TELL 34 EMIT CR
+                1 CELLS + + ALIGNED
+            ELSE
+                DUP [ ' 0BRANCH ] LITERAL = IF
+                    DROP \ 0BRANCH
+                    TAB ." 0BRANCH "
+                    1 CELLS +
+                    DUP @ . CR
+                ELSE
+                    DUP [ ' BRANCH ] LITERAL = IF
+                        DROP \ BRANCH
+                        TAB ." BRANCH "
+                        1 CELLS +
+                        DUP @ . CR
+                    ELSE
+                        TAB XT-NAME TELL CR
+                    THEN
+                THEN
+            THEN
+        THEN    
+        1 CELLS +
+    REPEAT
+    TAB ." EXIT " CR
+    DROP
+    DROP
+;
+
