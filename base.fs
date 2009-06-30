@@ -75,49 +75,67 @@ DEC 32 CONSTANT BL
 : SPACES BEGIN DUP 0> WHILE SPACE 1- REPEAT DROP ;
 
 \ decompiler!
-: XT-NAME 9 CELLS - COUNT ;
+: XT-NAME 9 CELLS - COUNT F_HIDDEN F_IMMED F_NOINTERP OR OR INVERT AND ;
 : CCOUNT DUP 1 CELLS + SWAP @ ;
+: '."' 46 EMIT 34 EMIT SPACE ;
 : SEE
-    BL WORD FIND
-    DUP 0= IF ." (not found)" CR DROP EXIT THEN \ bail out if the word is not found
-    DUP DE>CFA @ DOCOL <> IF ." (native)" CR DROP EXIT THEN \ if it's not a colon word, print native
+    BL WORD DUP FIND
+    DUP 0= IF ." (not found)" CR 2DROP EXIT THEN \ bail out if the word is not found
+    DUP DE>CFA @ DOCOL <> IF ." (native)" CR 2DROP EXIT THEN \ bail if its not a colon def
+    0 >R
+    ." :" SPACE SWAP COUNT TELL SPACE \ ": FOO "
+    DUP 1 CELLS + C@
+    DUP F_IMMED AND 0<> IF ." IMMEDIATE" SPACE THEN
+    DUP F_NOINTERP AND 0<> IF ." NOINTERPRET" SPACE THEN
+    DROP CR
     DE>DFA BEGIN
-        DUP @ DUP 0<>
+        DUP @ DUP 2 PICK R@ < OR
     WHILE
         DUP [ ' LIT ] LITERAL = IF           
             DROP \ LIT
-            TAB ." LIT "
             1 CELLS +
-            DUP @ . CR
+            TAB DUP @ . CR
         ELSE
             DUP [ ' LITSTRING ] LITERAL = IF
                 DROP \ LITSTRING
-                TAB ." LITSTRING " 34 EMIT
                 1 CELLS +
-                DUP CCOUNT TUCK TELL 34 EMIT CR
+                TAB '."' DUP CCOUNT TUCK TELL 34 EMIT CR
                 1 CELLS + + ALIGNED
             ELSE
                 DUP [ ' 0BRANCH ] LITERAL = IF
-                    DROP \ 0BRANCH
-                    TAB ." 0BRANCH "
+                    TAB XT-NAME TELL SPACE
                     1 CELLS +
+                    DUP @ DUP 0> IF
+                        OVER OVER CELLS + 
+                        DUP R@ > IF R> SWAP >R THEN
+                        DROP
+                    THEN
+                    DROP
                     DUP @ . CR
                 ELSE
                     DUP [ ' BRANCH ] LITERAL = IF
-                        DROP \ BRANCH
-                        TAB ." BRANCH "
+                        TAB XT-NAME TELL SPACE
                         1 CELLS +
+                        DUP @ DUP 0> IF
+                            OVER OVER CELLS + 
+                            DUP R@ > IF R> SWAP >R THEN
+                            DROP
+                        THEN
+                        DROP
                         DUP @ . CR
                     ELSE
-                        TAB XT-NAME TELL CR
+                        DUP 0= IF
+                            DROP \ EXIT
+                            TAB ." EXIT" CR
+                        ELSE
+                            TAB XT-NAME TELL CR
+                        THEN
                     THEN
                 THEN
             THEN
         THEN    
         1 CELLS +
     REPEAT
-    TAB ." EXIT " CR
-    DROP
-    DROP
+    ." ;" CR
+    R> 3 NDROP
 ;
-
