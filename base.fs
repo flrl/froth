@@ -78,6 +78,7 @@ DEC 32 CONSTANT BL
 : XT-NAME 9 CELLS - COUNT F_HIDDEN F_IMMED F_NOINTERP OR OR INVERT AND ;
 : CCOUNT DUP 1 CELLS + SWAP @ ;
 : '."' 46 EMIT 34 EMIT SPACE ;
+: 'S"' [ CHAR S ] LITERAL EMIT 34 EMIT SPACE ;
 : SEE
     BL WORD DUP FIND
     DUP 0= IF ." (not found)" CR 2DROP EXIT THEN \ bail out if the word is not found
@@ -92,15 +93,17 @@ DEC 32 CONSTANT BL
         DUP @ DUP 2 PICK R@ < OR
     WHILE
         DUP [ ' LIT ] LITERAL = IF           
-            DROP \ LIT
+            TAB 40 EMIT SPACE XT-NAME TELL SPACE 41 EMIT 3 SPACES
             1 CELLS +
-            TAB DUP @ . CR
+            DUP @ . CR
         ELSE
             DUP [ ' LITSTRING ] LITERAL = IF
-                DROP \ LITSTRING
+                TAB 40 EMIT SPACE XT-NAME TELL SPACE
                 1 CELLS +
-                TAB '."' DUP CCOUNT TUCK TELL 34 EMIT CR
-                1 CELLS + + ALIGNED
+                DUP @ 0 .R SPACE 41 EMIT 
+                3 SPACES 'S"' DUP CCOUNT TUCK TELL 34 EMIT
+                DUP ALIGNED /CELLS 3 SPACES 40 EMIT SPACE . ." cells " 41 EMIT CR
+                ALIGNED +
             ELSE
                 DUP [ ' 0BRANCH ] LITERAL = IF
                     TAB XT-NAME TELL SPACE
@@ -111,7 +114,7 @@ DEC 32 CONSTANT BL
                         DROP
                     THEN
                     DROP
-                    DUP @ . CR
+                    DUP @ . CR  \ FIXME not sure if we get the right number here?
                 ELSE
                     DUP [ ' BRANCH ] LITERAL = IF
                         TAB XT-NAME TELL SPACE
@@ -139,3 +142,4 @@ DEC 32 CONSTANT BL
     ." ;" CR
     R> 3 NDROP
 ;
+
