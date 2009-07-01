@@ -106,7 +106,7 @@ DEC 32 CONSTANT BL
                     TAB XT-NAME TELL SPACE
                     1 CELLS +
                     DUP @ DUP 0> IF
-                        OVER OVER CELLS + 
+                        2DUP CELLS + 
                         DUP R@ > IF R> SWAP >R THEN
                         DROP
                     THEN
@@ -117,7 +117,7 @@ DEC 32 CONSTANT BL
                         TAB XT-NAME TELL SPACE
                         1 CELLS +
                         DUP @ DUP 0> IF
-                            OVER OVER CELLS + 
+                            2DUP CELLS + 
                             DUP R@ > IF R> SWAP >R THEN
                             DROP
                         THEN
