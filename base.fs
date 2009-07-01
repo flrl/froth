@@ -83,13 +83,12 @@ DEC 32 CONSTANT BL
     BL WORD DUP FIND
     DUP 0= IF ." (not found)" CR 2DROP EXIT THEN \ bail out if the word is not found
     DUP DE>CFA @ DOCOL <> IF ." (native)" CR 2DROP EXIT THEN \ bail if its not a colon def
-    0 >R
     ." :" SPACE SWAP COUNT TELL SPACE \ ": FOO "
     DUP 1 CELLS + C@
     DUP F_IMMED AND 0<> IF ." IMMEDIATE" SPACE THEN
     DUP F_NOINTERP AND 0<> IF ." NOINTERPRET" SPACE THEN
     DROP CR
-    DE>DFA BEGIN
+    DE>DFA DUP >R BEGIN
         DUP @ DUP 2 PICK R@ < OR
     WHILE
         DUP [ ' LIT ] LITERAL = IF           
