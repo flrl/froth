@@ -35,13 +35,8 @@
         SWAP        \  count key
         41          \  count key ')'
         =           \  count kflag
-\         DUP         \  count kflag kflag
-\         -ROT        \  kflag kflag count
-\         SWAP        \  kflag count kflag
         TUCK        \  kflag count kflag
         -           \  kflag count-?
-\         SWAP        \  count kflag
-\         OVER        \  count kflag count
         TUCK        \  count kflag count
         0=          \  count kflag cflag
         +           \  count kcflag
@@ -113,7 +108,7 @@ DEC 32 CONSTANT BL
                         DROP
                     THEN
                     DROP
-                    DUP @ . CR  \ FIXME not sure if we get the right number here?
+                    DUP @ . CR
                 ELSE
                     DUP [ ' BRANCH ] LITERAL = IF
                         TAB XT-NAME TELL SPACE

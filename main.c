@@ -38,7 +38,7 @@ int main (int argc, char **argv) {
     interpreter_state = S_INTERPRET;
     docolon_mode = DM_NORMAL;
     stack_init(&data_stack);
-    mem_init();
+    mem_init(0);
     *var_BASE = 0;
     *var_LATEST = (cell) &_dict_var_LATEST;
 
