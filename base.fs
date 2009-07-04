@@ -68,6 +68,10 @@ DEC 32 CONSTANT BL
 : COUNT DUP 1+ SWAP C@ ;
 : CTELL COUNT TELL ;
 : SPACES BEGIN DUP 0> WHILE SPACE 1- REPEAT DROP ;
+: @++  ( addr -- addr+1 n )     DUP @ SWAP 1 CELLS + SWAP ;
+: C@++ ( caddr -- caddr+1 n )   DUP C@ SWAP 1+ SWAP ;
+: DUMP ( caddr len -- ) HEX >R BEGIN R@ 0> WHILE C@++ 3 U.R R> 1- >R REPEAT CR R> 2DROP DEC ;
+
 
 \ decompiler!
 : XT-NAME 9 CELLS - COUNT F_HIDDEN F_IMMED F_NOINTERP OR OR INVERT AND ;
@@ -137,3 +141,19 @@ DEC 32 CONSTANT BL
     R> 3 NDROP
 ;
 
+: MARKER IMMEDIATE
+    CREATE  ( -- dfa )
+    DUP DFA>CFA DOCOL SWAP !                        \ set the code field to DOCOL
+    DFA>DE  ( dfa -- de )
+    DUP [ ' LIT ] LITERAL , ,                       \ compile literal DE address
+        [ ' HERE ] LITERAL , [ ' ! ] LITERAL ,      \ compile HERE !
+    @       ( de -- link )
+        [ ' LIT ] LITERAL , ,                       \ compile literal link address
+        [ ' LATEST ] LITERAL , [ ' ! ] LITERAL ,    \ compile LATEST !
+    [ 0 ] LITERAL ,                                 \ compile EXIT
+;
+
+
+
+
+MARKER reset

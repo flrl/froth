@@ -806,7 +806,7 @@ PRIMITIVE ("C@", 0, _fetchbyte, _storebyte) {
     REG(b);
 
     DPOP(a);
-    b = *((char*) a);
+    b = *((unsigned char*) a);
     DPUSH(b);
 }
 

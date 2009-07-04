@@ -6,8 +6,10 @@
   words like IF etc that are meaningless in interpreted mode and possibly have edge cases.
   then make do_colon check the flag before trying to run them and if they shouldn't be run
   then just no-op (and maybe print a warning)  <- sorta done, but needs more thought
-* debug primitives -- DUMP, etc
+* debug primitives -- WORDS, DUMP, etc
 * proper test suite built around ASSERT
+* POSTPONE
+* add a number-of-cells field to dictentry and hook everything up to know about it.
 
 
 
