@@ -38,11 +38,27 @@ typedef struct _dict_entry {
     cell        param[];
 } DictEntry;
 
+//
+typedef struct _dict_entry_new {
+    struct _dict_entry *link;
+      uint8_t     flags1;
+      char        name[MAX_WORD_LEN];
+    uint32_t    flags2;
+    pvf         code;
+    cell        param[];
+} NewDictEntry;
+//
+
 #define DE_to_CFA(DE)   (pvf*)(((void*)(DE)) + offsetof(struct _dict_entry, code))
 #define DE_to_DFA(DE)   (cell*)(((void*)(DE)) + offsetof(struct _dict_entry, param))
-#define XT_to_DE(XT)    (DictEntry*)(((void*)(XT)) - offsetof(struct _dict_entry, code))
-#define CFA_to_DE(CFA)  XT_to_DE(CFA)
+#define DE_to_SFA(DE)   (uint32_t*)(((void*)(DE)) + offsetof(struct _dict_entry, sentinel))
+
+#define CFA_to_DE(CFA)  (DictEntry*)(((void*)(CFA)) - offsetof(struct _dict_entry, code))
 #define DFA_to_DE(DFA)  (DictEntry*)(((void*)(DFA)) - offsetof(struct _dict_entry, param))
+
+#define CFA_to_DFA(CFA) DE_to_DFA(CFA_to_DE(CFA))
+#define CFA_to_SFA(CFA) DE_to_SFA(CFA_to_DE(CFA))
+
 #define DFA_to_CFA(DFA) DE_to_CFA(DFA_to_DE(DFA))
 
 typedef struct _dict_debug {
@@ -51,10 +67,10 @@ typedef struct _dict_debug {
 } DictDebug;
 
 typedef struct _counted_string {
-    uint8_t     length;
-    char        value[255];
-} CountedString;
 #define MAX_COUNTED_STRING_LENGTH (255)
+    uint8_t     length;
+    char        value[MAX_COUNTED_STRING_LENGTH];
+} CountedString;
 
 
 enum {

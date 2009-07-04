@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -97,10 +98,10 @@ DictEntry _dict__LIT;
                                              \-> (etc)
 
 */
-static inline void do_execute (const pvf *xt, void *arg) {
-    uint32_t *sentinel = (uint32_t*) (xt) - 1;
+static inline void do_execute (const pvf *xt) {
+    const uint32_t *sentinel = CFA_to_SFA(xt);
     if (*sentinel == SENTINEL) {
-        (**xt)(arg);
+        (**xt)(CFA_to_DFA(xt));
     }
     else {
         fprintf(stderr, "Invalid execution token: %p\n", xt);
@@ -140,7 +141,7 @@ void do_interpret (void *pfa) {
             DPUSH(a);
             _DEtoCFA(NULL);
             DPOP(a);
-            do_execute (a.as_xt, a.as_ptr + sizeof(cell));
+            do_execute(a.as_xt); 
         }
     }
     else {
@@ -203,7 +204,7 @@ void do_colon(void *pfa) {
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_NORMAL:
-                do_execute(param[i].as_xt, param[i].as_dfa + 1);
+                do_execute(param[i].as_xt);
                 break;
             case DM_BRANCH:
                 a = param[i];       // param is an offset to branch to
@@ -1057,12 +1058,20 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     DPOP(a);
     word = a.as_cs;
     if (word) {
-        a.as_i = strtol(word->value, &endptr, var_BASE->as_i);
-        DPUSH(a);   // value
-        a.as_i = word->value + word->length - endptr;
-        DPUSH(a);   // number of chars left unparsed
+        errno = 0;
+        a.as_u = strtoul(word->value, &endptr, var_BASE->as_i);
+        if (errno == 0) {
+            DPUSH(a);   // value
+            a.as_i = word->value + word->length - endptr;
+            DPUSH(a);   // number of chars left unparsed
+        }
+        else {
+            perror("NUMBER");   // FIXME do this differently?
+            _QUIT(NULL);
+        }
     }
     else {
+        // FIXME error and _QUIT
         DPUSH((cell)(intptr_t) 0);   // value
         DPUSH((cell)(intptr_t) -1);  // negative status means parse failed
     }
@@ -1076,7 +1085,7 @@ PRIMITIVE ("U.R", 0, _UdotR, _NUMBER) {
     int minlen;
     REG(a);
     register int i;
-    register int base;
+    register unsigned int base;
 
     base = ((var_BASE->as_u >= 2 && var_BASE->as_u <= 36) ? var_BASE->as_u : 10);
 
@@ -1090,7 +1099,7 @@ PRIMITIVE ("U.R", 0, _UdotR, _NUMBER) {
         a.as_u /= base;
     } while (a.as_u);
     // buf[i] is the start of the converted string
-    printf("%*.32s", minlen, &buf[i]);
+    printf("%*.33s", minlen, &buf[i]);
 }
 
 
@@ -1102,7 +1111,7 @@ PRIMITIVE (".R", 0, _dotR, _UdotR) {
     int minlen;
     REG(a);
     register int i;
-    register int base;
+    register unsigned int base;
 
     base = ((var_BASE->as_u >= 2 && var_BASE->as_u <= 36) ? var_BASE->as_u : 10);
 
@@ -1414,7 +1423,7 @@ PRIMITIVE ("/CELLS", 0, _divCELLS, _CELLS) {
     REG(b);
 
     DPOP(a);
-    // Doesn't like dividing by const unsigned = 4.  Is it trying to optimise to a shift?
+    // signed/unsigned converts one to the other first
     b.as_i = sizeof(cell);
     DPUSH((cell)(intptr_t) (a.as_i / b.as_i));
 }
@@ -1425,7 +1434,7 @@ PRIMITIVE ("EXECUTE", 0, _EXECUTE, _divCELLS) {
     REG(xt);
 
     DPOP(xt);
-    do_execute(xt.as_xt, xt.as_dfa + 1);
+    do_execute(xt.as_xt);
 }
 
 
