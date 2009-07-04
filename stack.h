@@ -28,8 +28,8 @@ static inline cell stack_top (const Stack *stack) {
     return stack->values[stack->index];
 }
 
-static inline cell stack_count (const Stack *stack) {
-    return stack->index + 1;
+static inline uintptr_t stack_count (const Stack *stack) {
+    return (stack->index >= 0 ? stack->index + 1 : 0);
 }
 
 static inline void stack_pick (Stack *stack, unsigned int n) {

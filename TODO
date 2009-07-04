@@ -1,11 +1,11 @@
 * work out how to make a prompt work
-* convert everything to use new_cell and rename it to cell
 * add primitives for control stack
 * implement if/else/then to also work in interp mode -- see [IF] etc in spec
 * maybe add another flag to say "is only available in compilation state" and add it to such
   words like IF etc that are meaningless in interpreted mode and possibly have edge cases.
   then make do_colon check the flag before trying to run them and if they shouldn't be run
   then just no-op (and maybe print a warning)  <- sorta done, but needs more thought
+* maybe add another flag to say "is only available in interpret state" etc
 * debug primitives -- WORDS, DUMP, etc
 * proper test suite built around ASSERT
 * POSTPONE

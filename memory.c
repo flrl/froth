@@ -68,10 +68,10 @@ void mem_init (size_t ncells) {
     // FIXME malloc error checking
 
     mem_ncells = ncells;
-    *var_HERE = (cell) mem_start;
+    var_HERE->as_dfa = mem_start;
 
-    *var_UINCR = INIT_UINCR;
-    *var_UTHRES = INIT_UTHRES;
+    var_UINCR->as_u = INIT_UINCR;
+    var_UTHRES->as_u = INIT_UTHRES;
 }
 
 
@@ -83,16 +83,16 @@ void mem_destroy () {
     mem_start = NULL;
     mem_ncells = 0;
 
-    *var_HERE = (cell) mem_start;
+    var_HERE->as_dfa = mem_start;
 
-    *var_UINCR = 0;
-    *var_UTHRES = 0;
+    var_UINCR->as_u = 0;
+    var_UTHRES->as_u = 0;
 }
 
 
 int mem_shouldgrow () {
-    size_t used_cells = (*(cell**)var_HERE - mem_start) / sizeof(cell);
-    if (mem_ncells - used_cells < *var_UTHRES) {
+    size_t used_cells = (var_HERE->as_dfa - mem_start) / sizeof(cell);
+    if (mem_ncells - used_cells < var_UTHRES->as_u) {
         return 1;
     }
     else {
@@ -102,8 +102,8 @@ int mem_shouldgrow () {
 
 
 int mem_canshrink () {
-    size_t used_cells = (*(cell**)var_HERE - mem_start) / sizeof(cell);
-    if (used_cells < mem_ncells - *var_UTHRES) {
+    size_t used_cells = (var_HERE->as_dfa - mem_start) / sizeof(cell);
+    if (used_cells < mem_ncells - var_UTHRES->as_u) {
         return 1;
     }
     else {
@@ -130,10 +130,10 @@ int mem_grow (size_t ncells) {
     }
     else if (new_mem_start != mem_start) {
         // realloc succeeded, but our memory region has moved
-        size_t here_offset = (cell *) *var_HERE - mem_start;
+        size_t here_offset = var_HERE->as_dfa - mem_start;
         mem_start = new_mem_start;
         mem_ncells = new_mem_ncells;
-        * (cell**) var_HERE = mem_start + here_offset;
+        var_HERE->as_dfa = mem_start + here_offset;
         fprintf(stderr, "succeeded (with relocation)\n");
     }
     else {
@@ -166,7 +166,7 @@ int mem_shrink (size_t ncells) {
     }
     else if (new_mem_start != mem_start) {
         // I cannot think of a scenario where it would need to relocate to shrink?
-        size_t here_offset = (cell *) *var_HERE - mem_start;
+        size_t here_offset = var_HERE->as_dfa - mem_start;
         mem_start = new_mem_start;
         mem_ncells = new_mem_ncells;
         * (cell**) var_HERE = mem_start + here_offset;

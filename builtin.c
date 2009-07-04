@@ -20,14 +20,14 @@
 #define VARIABLE(NAME, INITIAL, FLAGS, LINK)                        \
     DictEntry _dict_var_##NAME =                                    \
         { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME,    \
-            SENTINEL, do_variable, {INITIAL} };                     \
+            SENTINEL, do_variable, {{INITIAL}} };                   \
     cell * const var_##NAME = &_dict_var_##NAME.param[0]
 
 // Define a constant and add it to the dictionary; also create a pointer for direct access
 #define CONSTANT(NAME, VALUE, FLAGS, LINK)                          \
     DictEntry _dict_const_##NAME =                                  \
         { &_dict_##LINK, ((FLAGS) | (sizeof(#NAME) - 1)), #NAME,    \
-            SENTINEL, do_constant, { VALUE } };                     \
+            SENTINEL, do_constant, {{VALUE}} };                     \
     const cell * const const_##NAME = &_dict_const_##NAME.param[0]
 
 // Define a "read only" variable and add it to the dictionary (special case of PRIMITIVE)
@@ -112,17 +112,17 @@ void do_interpret (void *pfa) {
     CountedString *word;
     REG(a);
 
-    DPUSH(' ');
+    DPUSH((cell)(intptr_t)' ');
     _WORD(NULL);
 
     DTOP(a);
-    word = (CountedString *) a;
+    word = a.as_cs;
 
     _FIND(NULL);
     DPOP(a); 
-    if (a) {
+    if (a.as_i) {
         // Found the word in the dictionary
-        DictEntry *de = (DictEntry *) a;
+        DictEntry *de = a.as_de;
 
         if (interpreter_state == S_INTERPRET && (de->flags & F_NOINTERP)) {
             // Do nothing
@@ -140,7 +140,7 @@ void do_interpret (void *pfa) {
             DPUSH(a);
             _DEtoCFA(NULL);
             DPOP(a);
-            do_execute ((pvf *) a, (void*) (a + sizeof(cell)));
+            do_execute (a.as_xt, a.as_ptr + sizeof(cell));
         }
     }
     else {
@@ -148,7 +148,7 @@ void do_interpret (void *pfa) {
         DPUSH((cell) word);
         _NUMBER(NULL);
         DPOP(a);  // Grab the return status
-        if (a == 0) {
+        if (a.as_i == 0) {
             // If there were 0 characters remaining, a number was parsed successfully
             // Value is still on the stack
             if (interpreter_state == S_COMPILE) {
@@ -159,7 +159,7 @@ void do_interpret (void *pfa) {
                 _comma(NULL);
             }
         }
-        else if (a == word->length) {
+        else if (a.as_i == word->length) {
             // Couldn't parse any digits
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN, 
@@ -167,7 +167,7 @@ void do_interpret (void *pfa) {
             DPOP(a);  // discard junk value
             _QUIT(NULL);
         }
-        else if (a > 0) {
+        else if (a.as_i > 0) {
             // Parsed some digits, but not all
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN,
@@ -178,7 +178,7 @@ void do_interpret (void *pfa) {
             // NUMBER failed
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN,
-                "couldn't parse number (NUMBER returned %"PRIiPTR")\n", a);
+                "couldn't parse number (NUMBER returned %"PRIiPTR")\n", a.as_i);
             DPOP(a);  // discard junk value
             _QUIT(NULL);
         }
@@ -194,10 +194,8 @@ void do_interpret (void *pfa) {
  */
 void do_colon(void *pfa) {
     REG(a);
-    REG(b);
     docolon_mode = DM_NORMAL;
-//    cell *param = pfa;
-    new_cell *param = pfa;
+    cell *param = pfa;
     for (int i = 0; docolon_mode != DM_NORMAL || param[i].as_xt != 0; i++) {
         switch (docolon_mode) {
             case DM_SKIP:
@@ -208,20 +206,18 @@ void do_colon(void *pfa) {
                 do_execute(param[i].as_xt, param[i].as_dfa + 1);
                 break;
             case DM_BRANCH:
-                a = param[i].as_i; // param is an offset to branch to
-                i += (a - 1);   // nb the for() increment will add the extra 1
+                a = param[i];       // param is an offset to branch to
+                i += (a.as_i - 1);  // nb the for() increment will add the extra 1
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_LITERAL:
-                DPUSH((cell)param[i].as_i);
+                DPUSH(param[i]);
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_SLITERAL:
-                a = param[i].as_u;         // length
-                b = (cell) &param[i+1]; // start of string
-                DPUSH(b);
-                DPUSH(a);
-                i += (CELLALIGN(a) / sizeof(cell));  
+                DPUSH((cell)(void*) &param[i+1]);   // start of string
+                a = param[i]; DPUSH(a);             // length
+                i += (CELLALIGN(a.as_i) / sizeof(cell));  
                 docolon_mode = DM_NORMAL;
                 break;
         }
@@ -275,9 +271,9 @@ VARIABLE (HERE,     0,              0,          var_UTHRES);    // default to NU
     CONSTANT(NAME, VALUE, FLAGS, LINK)
  ***************************************************************************/
 CONSTANT (VERSION,      0,                      0,  var_HERE);
-CONSTANT (DOCOL,        (cell) &do_colon,       0,  const_VERSION);
-CONSTANT (DOVAR,        (cell) &do_variable,    0,  const_DOCOL);
-CONSTANT (DOCON,        (cell) &do_constant,    0,  const_DOVAR);
+CONSTANT (DOCOL,        (intptr_t)&do_colon,    0,  const_VERSION);
+CONSTANT (DOVAR,        (intptr_t)&do_variable, 0,  const_DOCOL);
+CONSTANT (DOCON,        (intptr_t)&do_constant, 0,  const_DOVAR);
 CONSTANT (EXIT,         0,                      0,  const_DOCON);
 CONSTANT (F_IMMED,      F_IMMED,                0,  const_EXIT);
 CONSTANT (F_NOINTERP,   F_NOINTERP,             0,  const_F_IMMED);
@@ -297,10 +293,10 @@ CONSTANT (UCELL_MAX,    UINTPTR_MAX,            0,  const_UCELL_MIN);
     READONLY(NAME, CELLFUNC, FLAGS, LINK)
  ***************************************************************************/
 
-READONLY (U0,           (cell)mem_get_start(),  0, const_UCELL_MAX);
-READONLY (USIZE,        mem_get_ncells(),       0, readonly_U0);
-READONLY (DOCOLMODE,    docolon_mode,           0, readonly_USIZE);
-READONLY (STATE,        interpreter_state,      0, readonly_DOCOLMODE);
+READONLY (U0,           (cell)mem_get_start(),              0, const_UCELL_MAX);
+READONLY (USIZE,        (cell)(uintptr_t)mem_get_ncells(),  0, readonly_U0);
+READONLY (DOCOLMODE,    (cell)(intptr_t)docolon_mode,       0, readonly_USIZE);
+READONLY (STATE,        (cell)(intptr_t)interpreter_state,  0, readonly_DOCOLMODE);
 
 
 /***************************************************************************
@@ -366,7 +362,7 @@ PRIMITIVE ("PICK", 0, _PICK, _TUCK) {
     REG(u);
 
     DPOP(u);
-    DPICK(u);
+    DPICK(u.as_u);
 }
 
 
@@ -375,7 +371,7 @@ PRIMITIVE ("ROLL", 0, _ROLL, _PICK) {
     REG(u);
 
     DPOP(u);
-    DROLL(u);
+    DROLL(u.as_u);
 }
 
 
@@ -419,11 +415,11 @@ PRIMITIVE ("2DROP", 0, _2DROP, _negROT) {
 
 // ( n*a n -- )
 PRIMITIVE ("NDROP", 0, _NDROP, _2DROP) {
-    REG(n);
+    register intptr_t n;
 
-    DPOP(n);
+    n = stack_pop(&data_stack).as_i;
     n = data_stack.index - n;
-    n = (n >= -1 ? n : -1);
+    if (n < -1)  n = -1;
     data_stack.index = n;
 }
 
@@ -442,11 +438,12 @@ PRIMITIVE ("2DUP", 0, _2DUP, _NDROP) {
 
 
 // ( n*a n -- n*a n*a )
-PRIMITIVE ("NDUP", 0, _NDUP, _2DUP) {
+PRIMITIVE ("NDUP", 0, _NDUP, _2DUP) {  // FIXME this implementation sucks
     cell *buf;
-    REG(n);
+    register uintptr_t n;
 
-    DPOP(n);
+    n = stack_pop(&data_stack).as_u;
+
     if ((buf = malloc(n * sizeof(cell))) != NULL) {
         for (register int i=0; i<n; i++)  DPOP(buf[i]);
         for (register int i=n-1; i>=0; i--)  DPUSH(buf[i]);
@@ -479,169 +476,169 @@ PRIMITIVE ("2SWAP", 0, _2SWAP, _NDUP) {
 }
 
 
-// ( a -- a ) or ( a -- a a )
+// ( a -- 0 | a a )
 PRIMITIVE ("?DUP", 0, _qDUP, _2SWAP) {
     REG(a);
 
     DTOP(a);
-    if (a)  DPUSH(a);
+    if (a.as_i)  DPUSH(a);
 }
 
 
-// ( a -- a+1 )
+// ( a -- a + 1 )
 PRIMITIVE ("1+", 0, _1plus, _qDUP) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a + 1);
+    DPUSH((cell) (a.as_i + 1));
 }
 
 
-// ( a -- a-1 )
+// ( a -- a - 1 )
 PRIMITIVE ("1-", 0, _1minus, _1plus) {
     REG(a);
     
     DPOP(a);
-    DPUSH(a - 1);
+    DPUSH((cell) (a.as_i - 1));
 }
 
 
-// ( a -- a+4 )
+// ( a -- a + 4 )
 PRIMITIVE ("4+", 0, _4plus, _1minus) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a + 4);
+    DPUSH((cell) (a.as_i + 4));
 }
 
 
-// ( a -- a-4 )
+// ( a -- a - 4 )
 PRIMITIVE ("4-", 0, _4minus, _4plus) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a - 4);
+    DPUSH((cell) (a.as_i - 4));
 }
 
 
-// ( b a -- a+b )
+// ( a b -- a + b )
 PRIMITIVE ("+", 0, _plus, _4minus) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(a + b);
+    DPOP(a);
+    DPUSH((cell) (a.as_i + b.as_i));
 }
 
 
-// ( b a -- b - a )
+// ( a b -- a - b )
 PRIMITIVE ("-", 0, _minus, _plus) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(b - a);
+    DPOP(a);
+    DPUSH((cell) (a.as_i - b.as_i));
 }
 
 
-// ( b a -- a * b )
+// ( a b -- a * b )
 PRIMITIVE ("*", 0, _multiply, _minus) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(a * b);
+    DPOP(a);
+    DPUSH((cell) (a.as_i * b.as_i));
 }
 
 
-// ( b a -- b / a)
+// ( a b -- a / b)
 PRIMITIVE ("/", 0, _divide, _multiply) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(b / a);
+    DPOP(a);
+    DPUSH((cell) (a.as_i / b.as_i));
 }
 
 
-// ( b a -- b % a)
+// ( a b -- a % b)
 PRIMITIVE ("MOD", 0, _modulus, _divide) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(b % a);
+    DPOP(a);
+    DPUSH((cell) (a.as_i % b.as_i));
 }
 
 
-// ( b a -- a == b )
+// ( a b -- a == b )
 PRIMITIVE ("=", 0, _equals, _modulus) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(a == b);
+    DPOP(a);
+    DPUSH((cell)(intptr_t) (a.as_i == b.as_i));
 }
 
 
-// ( b a -- a != b )
+// ( a b -- a != b )
 PRIMITIVE ("<>", 0, _notequals, _equals) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(a != b);
+    DPOP(a);
+    DPUSH((cell)(intptr_t) (a.as_i != b.as_i));
 }
 
 
-// ( b a -- b < a )
+// ( a b -- a < b )
 PRIMITIVE ("<", 0, _lt, _notequals) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(b < a);
+    DPOP(a);
+    DPUSH((cell)(intptr_t) (a.as_i < b.as_i));
 }
 
 
-// ( b a -- b > a )
+// ( a b -- a > b )
 PRIMITIVE (">", 0, _gt, _lt) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(b > a);
+    DPOP(a);
+    DPUSH((cell)(intptr_t) (a.as_i > b.as_i));
 }
 
 
-// ( b a -- b <= a )
+// ( a b -- a <= b )
 PRIMITIVE ("<=", 0, _lte, _gt) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(b <= a);
+    DPOP(a);
+    DPUSH((cell)(intptr_t) (a.as_i <= b.as_i));
 }
 
 
-// ( b a -- b >= a )
+// ( a b -- a >= b )
 PRIMITIVE (">=", 0, _gte, _lte) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(b >= a);
+    DPOP(a);
+    DPUSH((cell)(intptr_t) (a.as_i >= b.as_i));
 }
 
 
@@ -650,7 +647,7 @@ PRIMITIVE ("0=", 0, _zero_equals, _gte) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a == 0);
+    DPUSH((cell)(intptr_t) (a.as_i == 0));
 }
 
 
@@ -659,7 +656,7 @@ PRIMITIVE ("0<>", 0, _notzero_equals, _zero_equals) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a != 0);
+    DPUSH((cell)(intptr_t) (a.as_i != 0));
 }
 
 
@@ -668,7 +665,7 @@ PRIMITIVE ("0<", 0, _zero_lt, _notzero_equals) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a < 0);
+    DPUSH((cell)(intptr_t) (a.as_i < 0));
 }
 
 
@@ -677,7 +674,7 @@ PRIMITIVE ("0>", 0, _zero_gt, _zero_lt) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a > 0);
+    DPUSH((cell)(intptr_t) (a.as_i > 0));
 }
 
 
@@ -686,7 +683,7 @@ PRIMITIVE ("0<=", 0, _zero_lte, _zero_gt) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a <= 0);
+    DPUSH((cell)(intptr_t) (a.as_i <= 0));
 }
 
 
@@ -695,40 +692,40 @@ PRIMITIVE ("0>=", 0, _zero_gte, _zero_lte) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a >= 0);
+    DPUSH((cell)(intptr_t) (a.as_i >= 0));
 }
 
 
-// ( b a -- a & b )
+// ( a b -- a & b )
 PRIMITIVE ("AND", 0, _AND, _zero_gte) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(a & b);
+    DPOP(a);
+    DPUSH((cell) (a.as_u & b.as_u));
 }
 
 
-// ( b a -- a | b )
+// ( a b -- a | b )
 PRIMITIVE ("OR", 0, _OR, _AND) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(a | b);
+    DPOP(a);
+    DPUSH((cell) (a.as_u | b.as_u));
 }
 
 
-// ( b a -- a ^ b )
+// ( a b -- a ^ b )
 PRIMITIVE ("XOR", 0, _XOR, _OR) {
     REG(a);
     REG(b);
 
-    DPOP(a);
     DPOP(b);
-    DPUSH(a ^ b);
+    DPOP(a);
+    DPUSH((cell) (a.as_u ^ b.as_u));
 }
 
 
@@ -737,7 +734,7 @@ PRIMITIVE ("INVERT", 0, _INVERT, _XOR) {
     REG(a);
 
     DPOP(a);
-    DPUSH(~a);
+    DPUSH((cell) ~a.as_u);
 }
 
 
@@ -752,7 +749,7 @@ PRIMITIVE ("!", 0, _store, _INVERT) {
     DPOP(addr);
     DPOP(a);
 
-    *(cell *) addr = a;
+    *addr.as_dfa = a;
 }
 
 
@@ -762,7 +759,7 @@ PRIMITIVE ("@", 0, _fetch, _store) {
     REG(a);
 
     DPOP(addr);
-    a = *(cell *) addr;
+    a = *addr.as_dfa;
     DPUSH(a);
 }
 
@@ -774,7 +771,7 @@ PRIMITIVE ("+!", 0, _addstore, _fetch) {
 
     DPOP(a);
     DPOP(b);
-    *((cell*) a) += b;
+    a.as_dfa->as_i += b.as_i;
 }
 
 
@@ -785,7 +782,7 @@ PRIMITIVE ("-!", 0, _substore, _addstore) {
 
     DPOP(a);
     DPOP(b);
-    *((cell*) a) -= b;
+    a.as_dfa->as_i -= b.as_i;
 }
 
 
@@ -796,18 +793,18 @@ PRIMITIVE ("C!", 0, _storebyte, _substore) {
 
     DPOP(a);
     DPOP(b);
-    *((char*) a) = (char) (b & 0xFF);
+    *(char*) a.as_ptr = (char) b.as_i;
 }
 
 
 // ( addr -- value )
 PRIMITIVE ("C@", 0, _fetchbyte, _storebyte) {
     REG(a);
-    REG(b);
+    register uintptr_t b;
 
     DPOP(a);
-    b = *((unsigned char*) a);
-    DPUSH(b);
+    b = *(unsigned char*) a.as_ptr;
+    DPUSH((cell) b);
 }
 
 
@@ -818,9 +815,9 @@ PRIMITIVE ("C@C!", 0, _ccopy, _fetchbyte) {
 
     DPOP(dest);
     DPOP(src);
-    *(char *) dest = *(const char *) src;
-    DPUSH(src+1);
-    DPUSH(dest+1);
+    *(char *) dest.as_ptr = *(const char *) src.as_ptr;
+    DPUSH((cell) (src.as_u + 1));
+    DPUSH((cell) (dest.as_u + 1));
 }
 
 
@@ -835,7 +832,7 @@ PRIMITIVE ("CMOVE", 0, _cmove, _ccopy) {
     DPOP(c);  // src
 
     // memmove(dest, src, len);
-    memmove((void*) b, (void*) c, a);
+    memmove(b.as_ptr, c.as_ptr, a.as_u);
 }
 
 
@@ -844,7 +841,7 @@ PRIMITIVE ("ALLOT", 0, _ALLOT, _cmove) {
     REG(n);
 
     DPOP(n);
-    *var_HERE += n;
+    var_HERE->as_i += n.as_i;
 }
 
 
@@ -921,9 +918,11 @@ PRIMITIVE ("2R@", F_NOINTERP, _2Rat, _Rat) {
 
 // ( n*a n*b n -- n*a )
 PRIMITIVE ("ASSERT", 0, _ASSERT, _2Rat) {
-    REG(n);
+    REG(a);
+    register uintptr_t n;
 
-    DPOP(n);
+    DPOP(a);
+    n = a.as_u;
     // FIXME don't flip out on negative input
 
     if (stack_count(&data_stack) >= 2 * n) {
@@ -937,13 +936,13 @@ PRIMITIVE ("ASSERT", 0, _ASSERT, _2Rat) {
             int i;
             for (i=0; i < n; i++) {
                 if (i % 8 == 0)  printf("expected> ");
-                printf("%"PRIiPTR" ", dup[i]);
+                printf("%"PRIiPTR" ", dup[i].as_i);
                 if (i % 8 == 7)  putchar('\n');
             }
             if (i % 8 != 0)  putchar('\n');
             for (i=0; i < n; i++) {
                 if (i % 8 == 0)  printf("found>    ");
-                printf("%"PRIiPTR" ", orig[i]);
+                printf("%"PRIiPTR" ", orig[i].as_i);
                 if (i % 8 == 7)  putchar('\n');
             }
             if (i % 8 != 0)  putchar('\n');
@@ -969,7 +968,7 @@ PRIMITIVE ("SHOWSTACK", 0, _SHOWSTACK, _ASSERT) {
         register int i;
         for (i = 0; i < stack_count(&data_stack); i++) {
             if (i % 8 == 0)  printf("stack>  ");
-            printf("%"PRIiPTR" ", data_stack.values[i]);
+            printf("%"PRIiPTR" ", data_stack.values[i].as_i);
             if (i % 8 == 7)  putchar('\n');
         }
         if (i % 8 != 0)  putchar('\n');  // if the last number didn't just print one out itself
@@ -984,7 +983,7 @@ PRIMITIVE ("KEY", 0, _KEY, _SHOWSTACK) {
     REG(a);
 
     /* stdio is line buffered when attached to terminals :) */
-    if ((a = fgetc(stdin)) != EOF) {
+    if ((a.as_i = fgetc(stdin)) != EOF) {
         DPUSH(a);
 //        if (a == '\n')  puts(" ok");
     }
@@ -998,7 +997,7 @@ PRIMITIVE ("EMIT", 0, _EMIT, _KEY) {
     REG(a);
 
     DPOP(a);
-    fputc(a, stdout);
+    fputc(a.as_i, stdout);
 }
 
 
@@ -1007,46 +1006,44 @@ PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
     static int usebuf = 0;  // Double-buffered
     static CountedString buf[2];
     
+    register int i;
+    register int blflag;
     REG(delim);
     REG(key);
-    REG(i);
-    REG(blflag);
 
     memset(buf[usebuf].value, 0, sizeof(buf[usebuf].value));
 
     /* Get the delimiter */
     DPOP(delim);
-    blflag = (delim == ' ');  // Treat control chars as whitespace when delim is space
+    blflag = (delim.as_i == ' ');  // Treat control chars as whitespace when delim is space
 
     /* First skip leading delimiters */
     do {
         _KEY(NULL);
         DPOP(key);
-        if (blflag && key < ' ')  key = delim;
-    } while (key == delim);
+        if (blflag && key.as_i < ' ')  key = delim;
+    } while (key.as_i == delim.as_i);
 
     /* Then start storing chars in the buffer */
     i = 0;
     do {
-        buf[usebuf].value[i++] = key;
+        buf[usebuf].value[i++] = key.as_i;
         _KEY(NULL);
         DPOP(key);
-        if (blflag && key < ' ')  key = delim;
-    } while (i < MAX_COUNTED_STRING_LENGTH && key != delim);
+        if (blflag && key.as_i < ' ')  key = delim;
+    } while (i < MAX_COUNTED_STRING_LENGTH && key.as_i != delim.as_i);
 
-    /* Return address and length on the stack */
+    /* Return address of counted string on the stack */
     if (i < MAX_COUNTED_STRING_LENGTH) {
         buf[usebuf].length = i;
-//        DPUSH((cell) buf[usebuf].value);
-//        DPUSH(i);
-        DPUSH((cell) &buf[usebuf]);
+        DPUSH((cell)(uintptr_t) &buf[usebuf]);
         usebuf = (usebuf == 0 ? 1 : 0);
     }
     else {
         // Ran out of room, return some kind of error
         // Don't flip the buffers
         // FIXME anything else?
-        DPUSH(0);
+        DPUSH((cell)(intptr_t) 0);
     }
 }
 
@@ -1058,40 +1055,39 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     REG(a);
 
     DPOP(a);
-    word = (CountedString *) a;
+    word = a.as_cs;
     if (word) {
-        a = strtol(word->value, &endptr, *var_BASE);
+        a.as_i = strtol(word->value, &endptr, var_BASE->as_i);
         DPUSH(a);   // value
-        a = word->value + word->length - endptr;
+        a.as_i = word->value + word->length - endptr;
         DPUSH(a);   // number of chars left unparsed
     }
     else {
-        DPUSH(0);   // value
-        DPUSH(-1);  // negative status means parse failed
+        DPUSH((cell)(intptr_t) 0);   // value
+        DPUSH((cell)(intptr_t) -1);  // negative status means parse failed
     }
 }
 
 
 // ( u n -- )
 PRIMITIVE ("U.R", 0, _UdotR, _NUMBER) {
-//    REG(base);
-//    REG(a);
-    register new_cell base;
-    register new_cell a;
-    REG(i);
     const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     char buf[33];  // 32 digits, terminating '\0'
     int minlen;
+    REG(a);
+    register int i;
+    register int base;
 
-    base.as_u = ((*var_BASE && *var_BASE <= 36 && *var_BASE >= 2) ? *var_BASE : 10);
+    base = ((var_BASE->as_u >= 2 && var_BASE->as_u <= 36) ? var_BASE->as_u : 10);
 
     memset(buf, 0, sizeof(buf));
     i = 32; // Start at end of string
-    DPOP(minlen);
-    DPOP(a.as_u);
+    DPOP(a);
+    minlen = a.as_u;
+    DPOP(a);
     do {
-        buf[--i] = charset[a.as_u % base.as_u];
-        a.as_u /= base.as_u;
+        buf[--i] = charset[a.as_u % base];
+        a.as_u /= base;
     } while (a.as_u);
     // buf[i] is the start of the converted string
     printf("%*.32s", minlen, &buf[i]);
@@ -1100,26 +1096,27 @@ PRIMITIVE ("U.R", 0, _UdotR, _NUMBER) {
 
 // ( i n -- )
 PRIMITIVE (".R", 0, _dotR, _UdotR) {
-    REG(base);
-    REG(a);
-    REG(i);
     const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     char buf[34];  // possible sign, 32 digits, terminating '\0'
     int neg;
     int minlen;
+    REG(a);
+    register int i;
+    register int base;
 
-    base = ((*var_BASE && *var_BASE <= 36 && *var_BASE >= 2) ? *var_BASE : 10);
+    base = ((var_BASE->as_u >= 2 && var_BASE->as_u <= 36) ? var_BASE->as_u : 10);
 
     memset(buf, 0, sizeof(buf));
     i = 33; // Start at end of string
-    DPOP(minlen);
     DPOP(a);
-    neg = (a < 0);
-    a = abs(a);  // FIXME when a == INTPTR_MIN, abs() will not work
+    minlen = a.as_u;
+    DPOP(a);
+    neg = (a.as_i < 0);
+    a.as_i = abs(a.as_i);  // FIXME when a == INTPTR_MIN, abs() will not work
     do {
-        buf[--i] = charset[a % base];
-        a /= base;
-    } while (a);
+        buf[--i] = charset[a.as_i % base];
+        a.as_i /= base;
+    } while (a.as_i);
     if (neg)  buf[--i] = '-';
     // buf[i] is the start of the converted string
     printf("%*.33s", minlen, &buf[i]);
@@ -1131,9 +1128,9 @@ PRIMITIVE ("FIND", 0, _FIND, _dotR) {
     REG(a);
 
     DPOP(a);
-    CountedString *word = (CountedString *) a;
+    CountedString *word = a.as_cs;
 
-    DictEntry *de = *(DictEntry **) var_LATEST;
+    DictEntry *de = var_LATEST->as_de;
     DictEntry *result = NULL;
 
     while (de != &_dict___ROOT) {
@@ -1157,7 +1154,7 @@ PRIMITIVE ("DE>CFA", 0, _DEtoCFA, _FIND) {
     REG(a);
 
     DPOP(a);
-    DPUSH((cell) DE_to_CFA(a));
+    DPUSH((cell)(uintptr_t) DE_to_CFA(a.as_de));
 }
 
 
@@ -1166,7 +1163,7 @@ PRIMITIVE ("DE>DFA", 0, _DEtoDFA, _DEtoCFA) {
     REG(a);
 
     DPOP(a);
-    DPUSH((cell) DE_to_DFA(a));
+    DPUSH((cell)(uintptr_t) DE_to_DFA(a.as_de));
 }
 
 
@@ -1175,7 +1172,7 @@ PRIMITIVE ("DFA>DE", 0, _DFAtoDE, _DEtoDFA) {
     REG(a);
 
     DPOP(a);
-    DPUSH((cell) DFA_to_DE(a));
+    DPUSH((cell)(uintptr_t) DFA_to_DE(a.as_dfa));
 }
 
 
@@ -1184,7 +1181,7 @@ PRIMITIVE ("DFA>CFA", 0, _DFAtoCFA, _DFAtoDE) {
     REG(a);
 
     DPOP(a);
-    DPUSH((cell) DFA_to_CFA(a));
+    DPUSH((cell)(uintptr_t) DFA_to_CFA(a.as_dfa));
 }
 
 
@@ -1201,14 +1198,14 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     CountedString *name;
 
     // Parse a space-delimited name from input
-    DPUSH(' ');
+    DPUSH((cell)(intptr_t) ' ');
     _WORD(NULL);
     DPOP(a);
-    name = (CountedString *) a;
+    name = a.as_cs;
 
     // Initialise a DictHeader for it
-    a = CELLALIGN(*var_HERE);
-    new_header = (DictHeader *) a;
+    a.as_u = CELLALIGN(var_HERE->as_u);
+    new_header = (DictHeader *) a.as_ptr;
     memset(new_header, 0, sizeof(DictHeader));
     new_header->link = *(DictEntry **) var_LATEST;
     new_header->flags = name->length & F_LENMASK;
@@ -1217,8 +1214,8 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     new_header->code = &do_variable;
 
     // Update LATEST and HERE
-    *var_LATEST = (cell) new_header;
-    *var_HERE = (cell) DE_to_DFA(new_header);
+    var_LATEST->as_de = (DictEntry*) new_header;
+    var_HERE->as_dfa = DE_to_DFA(new_header);
 
     // Push DFA
     DPUSH(*var_HERE);
@@ -1231,7 +1228,7 @@ PRIMITIVE (",", 0, _comma, _CREATE) {
 
     DPOP(a);
     **(cell**)var_HERE = a;
-    *var_HERE += sizeof(cell);
+    var_HERE->as_ptr += sizeof(cell);
     // FIXME is this right?
 }
 
@@ -1254,8 +1251,8 @@ PRIMITIVE (":", 0, _colon, _rbrac) {
 
     _CREATE(NULL);
     DPOP(a);
-    a = (cell) DFA_to_CFA(a);
-    *(pvf *) a = *(pvf *) const_DOCOL;
+    a = (cell) DFA_to_CFA(a.as_dfa);
+    *a.as_xt = const_DOCOL->as_pvf;
     DPUSH(*var_LATEST);
     _HIDDEN(NULL);
     _rbrac(NULL);
@@ -1294,13 +1291,13 @@ PRIMITIVE ("HIDDEN", 0, _HIDDEN, _NOINTERP) {
 
     DPOP(a);
 
-    ((DictEntry*) a)->flags ^= F_HIDDEN;
+    a.as_de->flags ^= F_HIDDEN;
 }
 
 
 // ( -- )
 PRIMITIVE ("HIDE", 0, _HIDE, _HIDDEN) {
-    DPUSH(' ');
+    DPUSH((cell)(intptr_t) ' ');
     _WORD(NULL);
     _FIND(NULL);
     _HIDDEN(NULL);
@@ -1309,7 +1306,7 @@ PRIMITIVE ("HIDE", 0, _HIDE, _HIDDEN) {
 
 // ( -- )
 PRIMITIVE ("'", 0, _tick, _HIDE) {
-    DPUSH(' ');
+    DPUSH((cell)(intptr_t) ' ');
     _WORD(NULL);
     _FIND(NULL);
     _DEtoCFA(NULL);
@@ -1327,8 +1324,8 @@ PRIMITIVE ("0BRANCH", 0, _0BRANCH, _BRANCH) {
     REG(a);
 
     DPOP(a);
-    if (a == 0)  docolon_mode = DM_BRANCH;
-    else         docolon_mode = DM_SKIP;
+    if (a.as_i == 0)  docolon_mode = DM_BRANCH;
+    else              docolon_mode = DM_SKIP;
 }
 
 
@@ -1345,8 +1342,8 @@ PRIMITIVE ("TELL", 0, _TELL, _LITSTRING) {
 
     DPOP(a);  // len
     DPOP(b);  // addr
-    while (a--) {
-        putchar(*(char *)(b++));
+    while (a.as_u--) {
+        putchar(*((char *) b.as_ptr++));
     }
 }
 
@@ -1355,7 +1352,7 @@ PRIMITIVE ("TELL", 0, _TELL, _LITSTRING) {
 PRIMITIVE ("UGROW", 0, _UGROW, _TELL) {
     REG(a);
 
-    a = mem_grow(*var_UINCR);
+    a.as_i = mem_grow(var_UINCR->as_u);
     DPUSH(a);
 }
 
@@ -1365,7 +1362,7 @@ PRIMITIVE ("UGROWN", 0, _UGROWN, _UGROW) {
     REG(a);
 
     DPOP(a);
-    a = mem_grow(a);
+    a.as_i = mem_grow(a.as_u);
     DPUSH(a);
 }
 
@@ -1374,7 +1371,7 @@ PRIMITIVE ("USHRINK", 0, _USHRINK, _UGROWN) {
     REG(a);
 
     DPOP(a);
-    a = mem_shrink(a);
+    a.as_i = mem_shrink(a.as_u);
     DPUSH(a);
 }
 
@@ -1396,7 +1393,7 @@ PRIMITIVE ("ABORT", 0, _ABORT, _QUIT) {
 PRIMITIVE ("breakpoint", F_IMMED, _breakpoint, _ABORT) {
     REG(a);
 
-    DPUSH(1);
+    DPUSH((cell)(intptr_t) 1);
     DPOP(a);
 }
 
@@ -1406,7 +1403,8 @@ PRIMITIVE ("CELLS", 0, _CELLS, _breakpoint) {
     REG(a);
 
     DPOP(a);
-    DPUSH(a * sizeof(cell));
+    a.as_i *= sizeof(cell);
+    DPUSH(a);
 }
 
 
@@ -1416,8 +1414,9 @@ PRIMITIVE ("/CELLS", 0, _divCELLS, _CELLS) {
     REG(b);
 
     DPOP(a);
-    b = sizeof(cell);  // wtf, why do I need to do it this way?
-    DPUSH(a / b);
+    // Doesn't like dividing by const unsigned = 4.  Is it trying to optimise to a shift?
+    b.as_i = sizeof(cell);
+    DPUSH((cell)(intptr_t) (a.as_i / b.as_i));
 }
 
 
@@ -1426,7 +1425,7 @@ PRIMITIVE ("EXECUTE", 0, _EXECUTE, _divCELLS) {
     REG(xt);
 
     DPOP(xt);
-    do_execute((pvf*) xt, (cell*) xt + 1);
+    do_execute(xt.as_xt, xt.as_dfa + 1);
 }
 
 
@@ -1438,4 +1437,4 @@ PRIMITIVE ("EXECUTE", 0, _EXECUTE, _divCELLS) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (cell) &_dict_var_LATEST, 0, _EXECUTE);  // FIXME keep this updated!
+VARIABLE (LATEST, (intptr_t)&_dict_var_LATEST, 0, _EXECUTE);  // FIXME keep this updated!

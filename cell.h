@@ -4,9 +4,9 @@
 #include <stdint.h>
 
 struct _dict_entry;
+struct _counted_string;
 
 typedef void (*pvf)();
-typedef intptr_t cell;
 
 typedef union _cell {
     intptr_t    as_i;
@@ -15,7 +15,8 @@ typedef union _cell {
     pvf         as_pvf;
     pvf         *as_xt;
     union _cell *as_dfa;
-} new_cell;
-//} cell;
+    void        *as_ptr;   
+    struct _counted_string *as_cs;
+} cell;
 
 #endif
