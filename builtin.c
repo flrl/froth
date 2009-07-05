@@ -1055,35 +1055,26 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     char *endptr;
     REG(a);
 
+    // Eliminate invalid base early
+    if (var_BASE->as_i != 0 && (var_BASE->as_i < 2 || var_BASE->as_i > 36)) {
+        fprintf(stderr, "BASE %"PRIiPTR" is out of range\n", var_BASE->as_i);
+        _QUIT(NULL);
+    }
+
     DPOP(a);
     word = a.as_cs;
-//     if (word) {
-//-        a.as_i = strtol(word->value, &endptr, var_BASE->as_i);
-//-        DPUSH(a);   // value
-//-        a.as_i = word->value + word->length - endptr;
-//-        DPUSH(a);   // number of chars left unparsed
-//+        errno = 0;
-//+        a.as_u = strtoul(word->value, &endptr, var_BASE->as_i);
-//+        if (errno == 0) {
-//+            DPUSH(a);   // value
-//+            a.as_i = word->value + word->length - endptr;
-//+            DPUSH(a);   // number of chars left unparsed
-//+        }
-//+        else {
-//+            perror("NUMBER");   // FIXME do this differently?
-//+            _QUIT(NULL);
-//+        }
-//     }
 
-    if (word) {
+    if (word && word->length > 0) {
         errno = 0;
         a.as_u = strtoul(word->value, &endptr, var_BASE->as_i);
-        if (errno == 0) {
+        if (errno == 0 || errno == EINVAL) {
+            // Now if it's EINVAL it just means it wasn't a number or had trailing junk
             DPUSH(a);   // value
             a.as_i = word->value + word->length - endptr;
             DPUSH(a);   // number of chars left unparsed
         }
         else {
+            // Some other error occurred
             perror("NUMBER");   // FIXME do this differently?
             _QUIT(NULL);
         }
