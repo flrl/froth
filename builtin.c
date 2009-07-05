@@ -125,7 +125,7 @@ void do_interpret (void *pfa) {
         // Found the word in the dictionary
         DictEntry *de = a.as_de;
 
-        if (interpreter_state == S_INTERPRET && (de->flags & F_NOINTERP)) {
+        if (interpreter_state == S_INTERPRET && (de->flags & F_COMPONLY)) {
             // Do nothing
             fprintf (stderr, "Useless use of \"%.*s\" in interpret mode\n", 
                 (de->flags & F_LENMASK), de->name);
@@ -277,8 +277,8 @@ CONSTANT (DOVAR,        (intptr_t)&do_variable, 0,  const_DOCOL);
 CONSTANT (DOCON,        (intptr_t)&do_constant, 0,  const_DOVAR);
 CONSTANT (EXIT,         0,                      0,  const_DOCON);
 CONSTANT (F_IMMED,      F_IMMED,                0,  const_EXIT);
-CONSTANT (F_NOINTERP,   F_NOINTERP,             0,  const_F_IMMED);
-CONSTANT (F_HIDDEN,     F_HIDDEN,               0,  const_F_NOINTERP);
+CONSTANT (F_COMPONLY,   F_COMPONLY,             0,  const_F_IMMED);
+CONSTANT (F_HIDDEN,     F_HIDDEN,               0,  const_F_COMPONLY);
 CONSTANT (F_LENMASK,    F_LENMASK,              0,  const_F_HIDDEN);
 CONSTANT (S_INTERPRET,  S_INTERPRET,            0,  const_F_LENMASK);
 CONSTANT (S_COMPILE,    S_COMPILE,              0,  const_S_INTERPRET);
@@ -852,7 +852,7 @@ PRIMITIVE ("ALLOT", 0, _ALLOT, _cmove) {
 //not place there using >R or 2>R;
 
 // ( a -- ) ( R: -- a )
-PRIMITIVE (">R", F_NOINTERP, _ltR, _ALLOT) {
+PRIMITIVE (">R", F_COMPONLY, _ltR, _ALLOT) {
     REG(a);
 
     DPOP(a);
@@ -861,7 +861,7 @@ PRIMITIVE (">R", F_NOINTERP, _ltR, _ALLOT) {
 
 
 // ( a b -- ) ( R: -- a b )
-PRIMITIVE ("2>R", F_NOINTERP, _2ltR, _ltR) {
+PRIMITIVE ("2>R", F_COMPONLY, _2ltR, _ltR) {
     REG(a);
     REG(b);
 
@@ -873,7 +873,7 @@ PRIMITIVE ("2>R", F_NOINTERP, _2ltR, _ltR) {
 
 
 // ( -- a ) ( R: a -- )
-PRIMITIVE ("R>", F_NOINTERP, _Rgt, _2ltR) {
+PRIMITIVE ("R>", F_COMPONLY, _Rgt, _2ltR) {
     REG(a);
 
     RPOP(a);
@@ -882,7 +882,7 @@ PRIMITIVE ("R>", F_NOINTERP, _Rgt, _2ltR) {
 
 
 // ( -- a b ) ( R: a b -- )
-PRIMITIVE ("2R>", F_NOINTERP, _2Rgt, _Rgt) {
+PRIMITIVE ("2R>", F_COMPONLY, _2Rgt, _Rgt) {
     REG(a);
     REG(b);
 
@@ -894,7 +894,7 @@ PRIMITIVE ("2R>", F_NOINTERP, _2Rgt, _Rgt) {
 
 
 // ( -- a ) ( R: a -- a )
-PRIMITIVE ("R@", F_NOINTERP, _Rat, _2Rgt) {
+PRIMITIVE ("R@", F_COMPONLY, _Rat, _2Rgt) {
     REG(a);
 
     RTOP(a);
@@ -903,7 +903,7 @@ PRIMITIVE ("R@", F_NOINTERP, _Rat, _2Rgt) {
 
 
 // ( -- a b ) ( R: a b -- a b )
-PRIMITIVE ("2R@", F_NOINTERP, _2Rat, _Rat) {
+PRIMITIVE ("2R@", F_COMPONLY, _2Rat, _Rat) {
     REG(a);
     REG(b);
 
@@ -1057,6 +1057,24 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 
     DPOP(a);
     word = a.as_cs;
+//     if (word) {
+//-        a.as_i = strtol(word->value, &endptr, var_BASE->as_i);
+//-        DPUSH(a);   // value
+//-        a.as_i = word->value + word->length - endptr;
+//-        DPUSH(a);   // number of chars left unparsed
+//+        errno = 0;
+//+        a.as_u = strtoul(word->value, &endptr, var_BASE->as_i);
+//+        if (errno == 0) {
+//+            DPUSH(a);   // value
+//+            a.as_i = word->value + word->length - endptr;
+//+            DPUSH(a);   // number of chars left unparsed
+//+        }
+//+        else {
+//+            perror("NUMBER");   // FIXME do this differently?
+//+            _QUIT(NULL);
+//+        }
+//     }
+
     if (word) {
         errno = 0;
         a.as_u = strtoul(word->value, &endptr, var_BASE->as_i);
@@ -1176,8 +1194,17 @@ PRIMITIVE ("DE>DFA", 0, _DEtoDFA, _DEtoCFA) {
 }
 
 
+// ( addr -- c-addr )
+PRIMITIVE ("DE>NAME", 0, _DEtoNAME, _DEtoDFA) {
+    REG(a);
+
+    DPOP(a);
+    DPUSH((cell)(uintptr_t) DE_to_NAME(a.as_de));
+}
+
+
 // ( addr -- addr )
-PRIMITIVE ("DFA>DE", 0, _DFAtoDE, _DEtoDFA) {
+PRIMITIVE ("DFA>DE", 0, _DFAtoDE, _DEtoNAME) {
     REG(a);
 
     DPOP(a);
@@ -1269,7 +1296,7 @@ PRIMITIVE (":", 0, _colon, _rbrac) {
 
 
 // ( -- )
-PRIMITIVE (";", F_IMMED | F_NOINTERP, _semicolon, _colon) {
+PRIMITIVE (";", F_IMMED | F_COMPONLY, _semicolon, _colon) {
     DPUSH(*const_EXIT); // FIXME i think this is wrong. XXX ok it's mostly fine, just tricky.
     _comma(NULL);
     DPUSH(*var_LATEST);
@@ -1287,15 +1314,15 @@ PRIMITIVE ("IMMEDIATE", F_IMMED, _IMMEDIATE, _semicolon) {
 
 
 // ( -- )
-PRIMITIVE ("NOINTERPRET", F_IMMED, _NOINTERP, _IMMEDIATE) {
+PRIMITIVE ("COMPILE-ONLY", F_IMMED, _COMPILE_ONLY, _IMMEDIATE) {
     DictEntry *latest = *(DictEntry **)var_LATEST;
     
-    latest->flags ^= F_NOINTERP;
+    latest->flags ^= F_COMPONLY;
 }
 
 
 // ( addr -- )
-PRIMITIVE ("HIDDEN", 0, _HIDDEN, _NOINTERP) {
+PRIMITIVE ("HIDDEN", 0, _HIDDEN, _COMPILE_ONLY) {
     REG(a);
 
     DPOP(a);
@@ -1438,6 +1465,42 @@ PRIMITIVE ("EXECUTE", 0, _EXECUTE, _divCELLS) {
 }
 
 
+// ( "word" -- )
+PRIMITIVE ("POSTPONE", F_IMMED | F_COMPONLY, _POSTPONE, _EXECUTE) {
+    REG(a);
+    CountedString *word;
+
+    DPUSH((cell)(intptr_t) ' ');
+    _WORD(NULL);
+    DTOP(a);
+    word = a.as_cs;
+    _FIND(NULL);
+    DPOP(a);
+    if (a.as_i) {
+        DictEntry *de = a.as_de;
+        if ((de->flags & F_IMMED) != 0) {
+            // Immediate words are simply compiled
+            DPUSH((cell) DE_to_CFA(de));
+            _comma(NULL);
+        }
+        else {
+            // For normal words, compile a compiler
+            DPUSH((cell) DE_to_CFA(&_dict__LIT));
+            _comma(NULL);
+            DPUSH((cell) DE_to_CFA(de));
+            _comma(NULL);
+            DPUSH((cell) DE_to_CFA(&_dict__comma));
+            _comma(NULL);
+        }
+    }
+    else {
+        // Couldn't find the word
+        fprintf(stderr, "unrecognised word: %.*s\n", word->length, word->value);
+        _QUIT(NULL);
+    }
+}
+
+
 
 /***************************************************************************
     The LATEST variable denotes the top of the dictionary.  Its initial
@@ -1446,4 +1509,4 @@ PRIMITIVE ("EXECUTE", 0, _EXECUTE, _divCELLS) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (intptr_t)&_dict_var_LATEST, 0, _EXECUTE);  // FIXME keep this updated!
+VARIABLE (LATEST, (intptr_t)&_dict_var_LATEST, 0, _POSTPONE);  // FIXME keep this updated!

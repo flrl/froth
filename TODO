@@ -8,8 +8,11 @@
 * maybe add another flag to say "is only available in interpret state" etc
 * debug primitives -- WORDS, DUMP, etc
 * proper test suite built around ASSERT
-* POSTPONE
 * add a number-of-cells field to dictentry and hook everything up to know about it.
+* actually hook up the memory stuff. this is going to require shifting to a function lookup table
+  approach, because all of the user-defined xt's will change if the realloc moves the memory area.
+* fix NUMBER (again) to deal with errno, endptr, etc sanely. eg 0 chars parsed means it's not a 
+  number at all, so simply tell the caller as much
 
 
 
@@ -21,3 +24,4 @@ ok how about:
     1. reinitialise parameter stack to empty
     2. set error state and error message to something sensible
     3. call QUIT
+

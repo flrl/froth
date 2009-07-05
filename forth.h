@@ -52,6 +52,7 @@ typedef struct _dict_entry_new {
 #define DE_to_CFA(DE)   (pvf*)(((void*)(DE)) + offsetof(struct _dict_entry, code))
 #define DE_to_DFA(DE)   (cell*)(((void*)(DE)) + offsetof(struct _dict_entry, param))
 #define DE_to_SFA(DE)   (uint32_t*)(((void*)(DE)) + offsetof(struct _dict_entry, sentinel))
+#define DE_to_NAME(DE)  (CountedString*)(((void*)(DE)) + offsetof(struct _dict_entry, flags))
 
 #define CFA_to_DE(CFA)  (DictEntry*)(((void*)(CFA)) - offsetof(struct _dict_entry, code))
 #define DFA_to_DE(DFA)  (DictEntry*)(((void*)(DFA)) - offsetof(struct _dict_entry, param))
@@ -75,7 +76,7 @@ typedef struct _counted_string {
 
 enum {
     F_IMMED = 0x80,
-    F_NOINTERP = 0x40,
+    F_COMPONLY = 0x40,
     F_HIDDEN = 0x20,
     F_LENMASK = 0x1F,
 };
