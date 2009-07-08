@@ -25,3 +25,31 @@ ok how about:
     2. set error state and error message to something sensible
     3. call QUIT
 
+
+
+memory sizes:
+
+4mb of ram in ds
+
+dictionary entry is 44bytes + data
+=> absolute maximum entries that fit into memory is 4m / 44 is 95325 if NONE have any data
+=> largest feasible number of dictionary entries 64k assuming average 5 cells of data each
+
+        ad'ble  addr    eff min 64k xt  32k xt
+align   loc'ns  size    size    tbl mem tbl mem
+4       1M      20 bits 44B     160K    80K
+16      256K    18 bits 48B     144K    72K
+64      64K     16 bits 64B     128K    64K
+
+but! if i have 64 byte alignment of dictionary entries, for a maximum of 65536 possible
+addressable dictionary entries, then I can address the entirety of ram using 16 bits, which means
+i don't need an XT lookup table at all, an XT is simply 1/64 addr/64.  to execute an xt, simply
+multiply it by 64, add the start of memory offset, and call the DE at that address.
+
+but! if i don't need an XT lookup table then there's also no necessity for an XT to be small,
+because it's still going to be occupying a whole cell in the callers data region anyway.  so an XT
+can simply remain a normal pointer to the code field.
+
+I don't need to store the XT in the dictionary entry itself.  i only thought this was necessary
+when i anticipated using an xt lookup table, and needed a sane way to work out the xt later on
+when compiling new words.
