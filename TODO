@@ -6,6 +6,7 @@
   then make do_colon check the flag before trying to run them and if they shouldn't be run
   then just no-op (and maybe print a warning)  <- sorta done, but needs more thought
 * maybe add another flag to say "is only available in interpret state" etc
+* maybe add another flag to say "can't be postponed or [compiled]" ala TO
 * debug primitives -- WORDS, DUMP, etc
 * proper test suite built around ASSERT
 * add a number-of-cells field to dictentry and hook everything up to know about it.

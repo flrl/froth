@@ -23,6 +23,7 @@
 : REPEAT IMMEDIATE COMPILE-ONLY 
     [ ' BRANCH ] LITERAL , SWAP HERE @ - /CELLS , DUP HERE @ SWAP - /CELLS SWAP ! 
 ;
+: RECURSE IMMEDIATE COMPILE-ONLY LATEST @ DE>CFA , ;
 : ( IMMEDIATE
     DEC 1           \  count
     BEGIN           \  
@@ -71,6 +72,18 @@ DEC 32 CONSTANT BL
 : @++  ( addr -- addr+1 n )     DUP @ SWAP 1 CELLS + SWAP ;
 : C@++ ( caddr -- caddr+1 n )   DUP C@ SWAP 1+ SWAP ;
 : DUMP ( caddr len -- ) HEX >R BEGIN R@ 0> WHILE C@++ 3 U.R R> 1- >R REPEAT CR R> 2DROP DEC ;
+: VALUE CREATE DFA>CFA DOCON SWAP ! , ;
+: TO IMMEDIATE
+    BL WORD FIND DE>DFA
+    STATE S_COMPILE = IF
+        POSTPONE LIT    
+        ,
+        POSTPONE !
+    ELSE
+        !
+    THEN
+;
+
 
 
 \ decompiler!
@@ -152,6 +165,7 @@ DEC 32 CONSTANT BL
         [ ' LATEST ] LITERAL , [ ' ! ] LITERAL ,    \ compile LATEST !
     [ 0 ] LITERAL ,                                 \ compile EXIT
 ;
+
 
 
 
