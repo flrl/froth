@@ -228,7 +228,7 @@ void do_colon(void *pfa) {
 
 /*
   finds a constant in the parameter field and pushes its VALUE onto the parameter stack
- */
+*/
 void do_constant(void *pfa) {
     // pfa is a pointer to the parameter field, so deref it to get the constant
     DPUSH(*((cell *) pfa));
@@ -242,6 +242,13 @@ void do_variable(void *pfa) {
     DPUSH((cell) pfa);
 }
 
+/*
+  finds a value in the parameter field and pushes its VALUE onto the parameter stack
+*/
+void do_value(void *pfa) {
+    // pfa is a pointer to the parameter field, so deref it to get the value
+    DPUSH(*((cell *) pfa));
+}
 
 
 /***************************************************************************
@@ -275,7 +282,8 @@ CONSTANT (VERSION,      0,                      0,  var_HERE);
 CONSTANT (DOCOL,        (intptr_t)&do_colon,    0,  const_VERSION);
 CONSTANT (DOVAR,        (intptr_t)&do_variable, 0,  const_DOCOL);
 CONSTANT (DOCON,        (intptr_t)&do_constant, 0,  const_DOVAR);
-CONSTANT (EXIT,         0,                      0,  const_DOCON);
+CONSTANT (DOVAL,        (intptr_t)&do_value,    0,  const_DOCON);
+CONSTANT (EXIT,         0,                      0,  const_DOVAL);
 CONSTANT (F_IMMED,      F_IMMED,                0,  const_EXIT);
 CONSTANT (F_COMPONLY,   F_COMPONLY,             0,  const_F_IMMED);
 CONSTANT (F_HIDDEN,     F_HIDDEN,               0,  const_F_COMPONLY);
@@ -915,10 +923,76 @@ PRIMITIVE ("2R@", F_COMPONLY, _2Rat, _Rat) {
 }
 
 
+/* Control stack primitives */
+
+// ( a -- ) ( C: -- a )
+PRIMITIVE (">CTRL", F_COMPONLY, _gtCTRL, _2Rat) {
+    REG(a);
+
+    DPOP(a);
+    CPUSH(a);
+}
+
+
+// ( a b -- ) ( C: -- a b )
+PRIMITIVE ("2>CTRL", F_COMPONLY, _2gtCTRL, _gtCTRL) {
+    REG(a);
+    REG(b);
+
+    DPOP(b);
+    DPOP(a);
+    CPUSH(a);
+    CPUSH(b);
+}
+
+
+// ( -- a ) ( C: a -- )
+PRIMITIVE ("CTRL>", F_COMPONLY, _CTRLgt, _2gtCTRL) {
+    REG(a);
+
+    CPOP(a);
+    DPUSH(a);
+}
+
+
+// ( -- a b ) ( C: a b -- )
+PRIMITIVE ("2CTRL>", F_COMPONLY, _2CTRLgt, _CTRLgt) {
+    REG(a);
+    REG(b);
+
+    CPOP(b);
+    CPOP(a);
+    DPUSH(a);
+    DPUSH(b);
+}
+
+
+// ( -- a ) ( C: a -- a )
+PRIMITIVE ("CTRL@", F_COMPONLY, _CTRLat, _2CTRLgt) {
+    REG(a);
+
+    CTOP(a);
+    DPUSH(a);
+}
+
+
+// ( -- a b ) ( C: a b -- a b )
+PRIMITIVE ("2CTRL@", F_COMPONLY, _2CTRLat, _CTRLat) {
+    REG(a);
+    REG(b);
+
+    CPOP(b);
+    CTOP(a);
+    CPUSH(b);
+    DPUSH(a);
+    DPUSH(b);
+}
+
+
 /* Debug stuff */
 
 // ( n*a n*b n -- n*a )
-PRIMITIVE ("ASSERT", 0, _ASSERT, _2Rat) {
+PRIMITIVE ("ASSERT", 0, _ASSERT, _2CTRLat) {
     REG(a);
     register uintptr_t n;
 
