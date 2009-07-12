@@ -923,10 +923,28 @@ PRIMITIVE ("2R@", F_COMPONLY, _2Rat, _Rat) {
 }
 
 
+// ( R: a -- a+1 )
+PRIMITIVE ("R++", F_COMPONLY, _Rplusplus, _2Rat) {
+    if (stack_count(&return_stack)) {
+        return_stack.values[return_stack.index].as_i ++;
+    }
+    // FIXME error handling
+}
+
+
+// ( R: a -- a-1 )
+PRIMITIVE ("R--", F_COMPONLY, _Rminusminus, _Rplusplus) {
+    if (stack_count(&return_stack)) {
+        return_stack.values[return_stack.index].as_i --;
+    }
+    // FIXME error handling
+}
+
+
 /* Control stack primitives */
 
 // ( a -- ) ( C: -- a )
-PRIMITIVE (">CTRL", F_COMPONLY, _gtCTRL, _2Rat) {
+PRIMITIVE (">CTRL", F_COMPONLY, _gtCTRL, _Rminusminus) {
     REG(a);
 
     DPOP(a);

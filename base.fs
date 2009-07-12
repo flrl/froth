@@ -3,9 +3,9 @@
 : TAB   9 EMIT ;
 : SPACE 32 EMIT ;
 : CMP   2DUP > ROT < - ;
-: BIN   2 BASE ! ;
-: DEC   10 BASE ! ;
-: HEX   16 BASE ! ;
+: BIN IMMEDIATE 2 BASE ! ;
+: DEC IMMEDIATE 10 BASE ! ;
+: HEX IMMEDIATE 16 BASE ! ;
 : .     0 .R SPACE ;
 : U.    0 U.R SPACE ;
 : LITERAL IMMEDIATE COMPILE-ONLY    [ ' LIT , ] LIT , , ;
@@ -25,27 +25,25 @@
 ;
 : RECURSE IMMEDIATE COMPILE-ONLY    LATEST @ DE>CFA , ;
 : ( IMMEDIATE
-    DEC 1           \  count
-    BEGIN           \  
-        KEY         \  count key
-        DUP         \  count key key
-        40          \  count key key '('
-        =           \  count key lflag
-        -ROT        \  key lflag count
-        +           \  key count+?
-        SWAP        \  count key
-        41          \  count key ')'
-        =           \  count kflag
-        TUCK        \  kflag count kflag
-        -           \  kflag count-?
-        TUCK        \  count kflag count
-        0=          \  count kflag cflag
-        +           \  count kcflag
-        2           \  count kcflag 2
-        =           \  count loopflag
-    UNTIL
-    DROP            \ drop count
+    DEC 1 >R
+    BEGIN
+        R@ 0>
+    WHILE
+        KEY
+        DUP 40 = IF     \ '('
+            R++
+        ELSE
+            DUP 41 = IF \ ')'
+                R--
+            THEN
+        THEN
+        DROP
+    REPEAT
+    R> DROP
 ;
+
+
+
 : ALIGNED   3 + 3 INVERT AND ;
 : ALIGN     HERE @ ALIGNED HERE ! ;
 : C,        HERE @ C! 1 HERE +! ;                    
@@ -64,7 +62,7 @@
 ;
 : VARIABLE  CREATE 1 CELLS ALLOT ;
 : CONSTANT  CREATE DFA>CFA DOCON SWAP !  , ;
-: EXIT IMMEDIATE    COMPILE-ONLY 0 , ;
+: EXIT IMMEDIATE COMPILE-ONLY   0 , ;
 DEC 32 CONSTANT BL
 : COUNT DUP 1+ SWAP C@ ;
 : CTELL COUNT TELL ;
