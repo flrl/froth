@@ -924,7 +924,7 @@ PRIMITIVE ("2R@", F_COMPONLY, _2Rat, _Rat) {
 
 
 // ( R: a -- a+1 )
-PRIMITIVE ("R++", F_COMPONLY, _Rplusplus, _2Rat) {
+PRIMITIVE ("R1+", F_COMPONLY, _R1plus, _2Rat) {
     if (stack_count(&return_stack)) {
         return_stack.values[return_stack.index].as_i ++;
     }
@@ -933,7 +933,7 @@ PRIMITIVE ("R++", F_COMPONLY, _Rplusplus, _2Rat) {
 
 
 // ( R: a -- a-1 )
-PRIMITIVE ("R--", F_COMPONLY, _Rminusminus, _Rplusplus) {
+PRIMITIVE ("R1-", F_COMPONLY, _R1minus, _R1plus) {
     if (stack_count(&return_stack)) {
         return_stack.values[return_stack.index].as_i --;
     }
@@ -944,7 +944,7 @@ PRIMITIVE ("R--", F_COMPONLY, _Rminusminus, _Rplusplus) {
 /* Control stack primitives */
 
 // ( a -- ) ( C: -- a )
-PRIMITIVE (">CTRL", F_COMPONLY, _gtCTRL, _Rminusminus) {
+PRIMITIVE (">CTRL", F_COMPONLY, _gtCTRL, _R1minus) {
     REG(a);
 
     DPOP(a);
@@ -1584,6 +1584,52 @@ PRIMITIVE ("POSTPONE", F_IMMED | F_COMPONLY, _POSTPONE, _EXECUTE) {
 }
 
 
+// ( n -- )
+PRIMITIVE ("THROW", 0, _THROW, _POSTPONE) {
+    REG(a);
+
+    DPOP(a);  // FIXME this is itself vulnerable to stack underrun
+    if (a.as_i != 0) {   // FIXME supposed to be special handling for ABORT and ABORT"
+        longjmp(exception_frame.target, a.as_i);
+    }
+}
+
+
+// ( xt -- status )
+PRIMITIVE ("CATCH", 0, _CATCH, _THROW) {
+    ExceptionFrame frame;
+    int exception;
+
+    memcpy(&frame, &exception_frame, sizeof(ExceptionFrame));
+    exception_frame.ds_index = data_stack.index;
+    exception_frame.rs_index = return_stack.index;
+    exception_frame.cs_index = control_stack.index;
+    if ((exception = setjmp(exception_frame.target)) != 0) {
+        // Exception occurred
+        fprintf(stderr, "Caught exception %i\n", exception);
+
+        // Reset stacks
+        data_stack.index = exception_frame.ds_index;
+        return_stack.index = exception_frame.rs_index;
+        control_stack.index = exception_frame.cs_index;
+
+        // Push the exception value
+        DPUSH((cell)(intptr_t) exception);
+    }
+    else {
+        REG(xt);
+        DTOP(xt);
+        fprintf(stderr, "Executing xt %"PRIuPTR" with exception handler\n", xt.as_u); 
+        _EXECUTE(NULL);
+
+        // EXECUTE ran successfully, push a 0
+        DPUSH((cell)(intptr_t) 0);
+    }
+
+    // Restore old exception frame
+    memcpy(&exception_frame, &frame, sizeof(ExceptionFrame));
+}
+
 
 /***************************************************************************
     The LATEST variable denotes the top of the dictionary.  Its initial
@@ -1592,4 +1638,4 @@ PRIMITIVE ("POSTPONE", F_IMMED | F_COMPONLY, _POSTPONE, _EXECUTE) {
     * Be sure to update its link pointer if you add more builtins before it!
     * This must be the LAST entry added to the dictionary!
  ***************************************************************************/
-VARIABLE (LATEST, (intptr_t)&_dict_var_LATEST, 0, _POSTPONE);  // FIXME keep this updated!
+VARIABLE (LATEST, (intptr_t)&_dict_var_LATEST, 0, _CATCH);  // FIXME keep this updated!

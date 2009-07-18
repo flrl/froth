@@ -31,10 +31,10 @@
     WHILE
         KEY
         DUP 40 = IF     \ '('
-            R++
+            R1+
         ELSE
             DUP 41 = IF \ ')'
-                R--
+                R1-
             THEN
         THEN
         DROP

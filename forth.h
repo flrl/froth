@@ -73,6 +73,12 @@ typedef struct _counted_string {
     char        value[MAX_COUNTED_STRING_LENGTH];
 } CountedString;
 
+typedef struct _exception_frame {
+    jmp_buf target;
+    int16_t ds_index;
+    int16_t rs_index;
+    int16_t cs_index;
+} ExceptionFrame;
 
 enum {
     F_IMMED = 0x80,
@@ -110,6 +116,7 @@ extern char  error_message[];
 
 extern jmp_buf cold_boot; //?
 extern jmp_buf warm_boot; //?
+extern ExceptionFrame exception_frame;
 
 extern void do_interpret (void*);
 
