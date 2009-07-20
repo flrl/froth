@@ -44,21 +44,21 @@
 #define CELLALIGN(X)    (((X) + (sizeof(cell) - 1)) & ~(sizeof(cell) - 1))
 
 // Data stack macros
-#define DTOP(X)         X = stack_top(&data_stack)
+#define DPEEK(X)        X = stack_peek(&data_stack)
 #define DPOP(X)         X = stack_pop(&data_stack)
 #define DPUSH(X)        stack_push(&data_stack, (X))
 #define DPICK(X)        stack_pick(&data_stack, (X))
 #define DROLL(X)        stack_roll(&data_stack, (X))
 
 // Return stack macros
-#define RTOP(X)         X = stack_top(&return_stack)
+#define RPEEK(X)        X = stack_peek(&return_stack)
 #define RPOP(X)         X = stack_pop(&return_stack)
 #define RPUSH(X)        stack_push(&return_stack, (X))
 #define RPICK(X)        stack_pick(&return_stack, (X))
 #define RROLL(X)        stack_roll(&return_stack, (X))
 
 // Control stack macros
-#define CTOP(X)         X = stack_top(&control_stack)
+#define CPEEK(X)        X = stack_peek(&control_stack)
 #define CPOP(X)         X = stack_pop(&control_stack)
 #define CPUSH(X)        stack_push(&control_stack, (X))
 #define CPICK(X)        stack_pick(&control_stack, (X))
@@ -116,7 +116,7 @@ void do_interpret (void *pfa) {
     DPUSH((cell)(intptr_t)' ');
     _WORD(NULL);
 
-    DTOP(a);
+    DPEEK(a);
     word = a.as_cs;
 
     _FIND(NULL);
@@ -336,7 +336,7 @@ PRIMITIVE ("SWAP", 0, _SWAP, _DROP) {
 PRIMITIVE ("DUP", 0, _DUP, _SWAP) {
     REG(a);
     
-    DTOP(a);
+    DPEEK(a);
     DPUSH(a);
 }
 
@@ -347,7 +347,7 @@ PRIMITIVE ("OVER", 0, _OVER, _DUP) {
     REG(b);
 
     DPOP(a);
-    DTOP(b);
+    DPEEK(b);
     DPUSH(a);
     DPUSH(b);
 }
@@ -427,9 +427,9 @@ PRIMITIVE ("NDROP", 0, _NDROP, _2DROP) {
     register intptr_t n;
 
     n = stack_pop(&data_stack).as_i;
-    n = data_stack.index - n;
+    n = data_stack.top - n;
     if (n < -1)  n = -1;
-    data_stack.index = n;
+    data_stack.top = n;
 }
 
 
@@ -439,7 +439,7 @@ PRIMITIVE ("2DUP", 0, _2DUP, _NDROP) {
     REG(b);
 
     DPOP(a);
-    DTOP(b);
+    DPEEK(b);
     DPUSH(a);
     DPUSH(b);
     DPUSH(a);
@@ -489,7 +489,7 @@ PRIMITIVE ("2SWAP", 0, _2SWAP, _NDUP) {
 PRIMITIVE ("?DUP", 0, _qDUP, _2SWAP) {
     REG(a);
 
-    DTOP(a);
+    DPEEK(a);
     if (a.as_i)  DPUSH(a);
 }
 
@@ -905,7 +905,7 @@ PRIMITIVE ("2R>", F_COMPONLY, _2Rgt, _Rgt) {
 PRIMITIVE ("R@", F_COMPONLY, _Rat, _2Rgt) {
     REG(a);
 
-    RTOP(a);
+    RPEEK(a);
     DPUSH(a);
 }
 
@@ -916,7 +916,7 @@ PRIMITIVE ("2R@", F_COMPONLY, _2Rat, _Rat) {
     REG(b);
 
     RPOP(b);
-    RTOP(a);
+    RPEEK(a);
     RPUSH(b);
     DPUSH(a);
     DPUSH(b);
@@ -926,7 +926,7 @@ PRIMITIVE ("2R@", F_COMPONLY, _2Rat, _Rat) {
 // ( R: a -- a+1 )
 PRIMITIVE ("R1+", F_COMPONLY, _R1plus, _2Rat) {
     if (stack_count(&return_stack)) {
-        return_stack.values[return_stack.index].as_i ++;
+        return_stack.values[return_stack.top].as_i ++;
     }
     // FIXME error handling
 }
@@ -935,7 +935,7 @@ PRIMITIVE ("R1+", F_COMPONLY, _R1plus, _2Rat) {
 // ( R: a -- a-1 )
 PRIMITIVE ("R1-", F_COMPONLY, _R1minus, _R1plus) {
     if (stack_count(&return_stack)) {
-        return_stack.values[return_stack.index].as_i --;
+        return_stack.values[return_stack.top].as_i --;
     }
     // FIXME error handling
 }
@@ -989,7 +989,7 @@ PRIMITIVE ("2CTRL>", F_COMPONLY, _2CTRLgt, _CTRLgt) {
 PRIMITIVE ("CTRL@", F_COMPONLY, _CTRLat, _2CTRLgt) {
     REG(a);
 
-    CTOP(a);
+    CPEEK(a);
     DPUSH(a);
 }
 
@@ -1000,7 +1000,7 @@ PRIMITIVE ("2CTRL@", F_COMPONLY, _2CTRLat, _CTRLat) {
     REG(b);
 
     CPOP(b);
-    CTOP(a);
+    CPEEK(a);
     CPUSH(b);
     DPUSH(a);
     DPUSH(b);
@@ -1019,8 +1019,8 @@ PRIMITIVE ("ASSERT", 0, _ASSERT, _2CTRLat) {
     // FIXME don't flip out on negative input
 
     if (stack_count(&data_stack) >= 2 * n) {
-        cell *orig = &data_stack.values[1 + data_stack.index - 2 * n];
-        cell *dup  = &data_stack.values[1 + data_stack.index - n];
+        cell *orig = &data_stack.values[1 + data_stack.top - 2 * n];
+        cell *dup  = &data_stack.values[1 + data_stack.top - n];
         if (memcmp(orig, dup, n * sizeof(cell)) == 0) {
             puts("ASSERT passed");
         }
@@ -1040,7 +1040,7 @@ PRIMITIVE ("ASSERT", 0, _ASSERT, _2CTRLat) {
             }
             if (i % 8 != 0)  putchar('\n');
         }
-        data_stack.index -= n;
+        data_stack.top -= n;
     }
     else {
         // stack would underflow!
@@ -1053,7 +1053,7 @@ PRIMITIVE ("ASSERT", 0, _ASSERT, _2CTRLat) {
 
 
 // ( -- )
-PRIMITIVE ("SHOWSTACK", 0, _SHOWSTACK, _ASSERT) {
+PRIMITIVE (".S", 0, _dotS, _ASSERT) {
     if (stack_count(&data_stack) == 0) {
         puts("(empty)");
     }
@@ -1072,7 +1072,7 @@ PRIMITIVE ("SHOWSTACK", 0, _SHOWSTACK, _ASSERT) {
 /* Other stuff */
 
 // ( -- char )
-PRIMITIVE ("KEY", 0, _KEY, _SHOWSTACK) {
+PRIMITIVE ("KEY", 0, _KEY, _dotS) {
     REG(a);
 
     /* stdio is line buffered when attached to terminals :) */
@@ -1555,7 +1555,7 @@ PRIMITIVE ("POSTPONE", F_IMMED | F_COMPONLY, _POSTPONE, _EXECUTE) {
 
     DPUSH((cell)(intptr_t) ' ');
     _WORD(NULL);
-    DTOP(a);
+    DPEEK(a);
     word = a.as_cs;
     _FIND(NULL);
     DPOP(a);
@@ -1588,46 +1588,65 @@ PRIMITIVE ("POSTPONE", F_IMMED | F_COMPONLY, _POSTPONE, _EXECUTE) {
 PRIMITIVE ("THROW", 0, _THROW, _POSTPONE) {
     REG(a);
 
-    DPOP(a);  // FIXME this is itself vulnerable to stack underrun
-    if (a.as_i != 0) {   // FIXME supposed to be special handling for ABORT and ABORT"
-        longjmp(exception_frame.target, a.as_i);
+    DPOP(a); // FIXME this is itself vulnerable to stack underrun
+    if (a.as_i != 0) {
+        ExceptionFrame *frame = exception_current_frame();
+        if (frame) {
+            fprintf(stderr, "throwing %"PRIiPTR"\n", a.as_i);
+            longjmp(frame->target, a.as_i);
+        }
+        else {
+            // nothing on exception stack, ABORT
+            fprintf(stderr, "Attempt to throw with empty exception stack, ABORTing\n");
+            _ABORT(NULL);
+        }
     }
 }
 
 
 // ( xt -- status )
 PRIMITIVE ("CATCH", 0, _CATCH, _THROW) {
-    ExceptionFrame frame;
+    ExceptionFrame *frame;
     int exception;
+    REG(xt);
 
-    memcpy(&frame, &exception_frame, sizeof(ExceptionFrame));
-    exception_frame.ds_index = data_stack.index;
-    exception_frame.rs_index = return_stack.index;
-    exception_frame.cs_index = control_stack.index;
-    if ((exception = setjmp(exception_frame.target)) != 0) {
-        // Exception occurred
-        fprintf(stderr, "Caught exception %i\n", exception);
+    DPOP(xt);
 
-        // Reset stacks
-        data_stack.index = exception_frame.ds_index;
-        return_stack.index = exception_frame.rs_index;
-        control_stack.index = exception_frame.cs_index;
+    if ((frame = exception_next_frame()) != NULL) {
+        frame->ds_top = data_stack.top;
+        frame->rs_top = return_stack.top;
+        frame->cs_top = control_stack.top;
 
-        // Push the exception value
-        DPUSH((cell)(intptr_t) exception);
+        if ((exception = setjmp(frame->target)) != 0) {
+            // Exception occurred
+            fprintf (stderr, "Caught exception %i while executing %"PRIuPTR"\n", 
+                exception, xt.as_u);
+
+            // Reset stacks
+            data_stack.top = frame->ds_top;
+            return_stack.top = frame->rs_top;
+            control_stack.top = frame->cs_top;
+
+            // Push the exception value
+            DPUSH((cell)(intptr_t) exception);
+        }
+        else {
+            fprintf(stderr, "Executing xt %"PRIuPTR" with exception handler\n", xt.as_u); 
+
+            do_execute(xt.as_xt);
+
+            // EXECUTE ran successfully, push a 0
+            DPUSH((cell)(intptr_t) 0);
+        }
+
+        exception_pop_frame();
     }
     else {
-        REG(xt);
-        DTOP(xt);
-        fprintf(stderr, "Executing xt %"PRIuPTR" with exception handler\n", xt.as_u); 
-        _EXECUTE(NULL);
-
-        // EXECUTE ran successfully, push a 0
-        DPUSH((cell)(intptr_t) 0);
+        // Throw exception stack overflow exception
+        fprintf(stderr, "Catch %"PRIuPTR" overflows exception stack\n", xt.as_u);
+        DPUSH((cell)(intptr_t) EXC_EXOVER);
+        _THROW(NULL);
     }
-
-    // Restore old exception frame
-    memcpy(&exception_frame, &frame, sizeof(ExceptionFrame));
 }
 
 

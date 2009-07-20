@@ -1,5 +1,4 @@
 * work out how to make a prompt work
-* add primitives for control stack
 * implement if/else/then to also work in interp mode -- see [IF] etc in spec
 * maybe add another flag to say "is only available in compilation state" and add it to such
   words like IF etc that are meaningless in interpreted mode and possibly have edge cases.
@@ -14,6 +13,7 @@
   approach, because all of the user-defined xt's will change if the realloc moves the memory area.
 * fix NUMBER (again) to deal with errno, endptr, etc sanely. eg 0 chars parsed means it's not a 
   number at all, so simply tell the caller as much
+* add ['], FORGET
 
 
 

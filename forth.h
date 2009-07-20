@@ -5,6 +5,7 @@
 #include <setjmp.h>
 
 #include "cell.h"
+#include "exception.h"
 #include "stack.h"
 #include "builtin.h"
 #include "memory.h"
@@ -72,13 +73,6 @@ typedef struct _counted_string {
     uint8_t     length;
     char        value[MAX_COUNTED_STRING_LENGTH];
 } CountedString;
-
-typedef struct _exception_frame {
-    jmp_buf target;
-    int16_t ds_index;
-    int16_t rs_index;
-    int16_t cs_index;
-} ExceptionFrame;
 
 enum {
     F_IMMED = 0x80,
