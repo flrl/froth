@@ -46,32 +46,6 @@ int main (int argc, char **argv) {
     var_BASE->as_i = 0;
     var_LATEST->as_de = &_dict_var_LATEST;
 
-    // Set up a default exception handler
-    exception_init();
-    if ((exception_frame = exception_next_frame()) == NULL) {
-        longjmp(cold_boot, -1);  // FIXME do it right
-    }
-
-    exception_frame->ds_top = exception_frame->rs_top = exception_frame->cs_top = STACK_EMPTY;
-    if ((exception = setjmp(exception_frame->target)) != 0) {
-        // Exception occurred
-        register int c;
-        fprintf(stderr, "Unhandled exception %i\n", exception);
-
-        // Reset stacks
-        data_stack.top = exception_frame->ds_top;
-        return_stack.top = exception_frame->rs_top;
-        control_stack.top = exception_frame->cs_top;
-
-        // Discard rest of current input line
-        // FIXME if the last char parsed was actually EOL this discards the NEXT line
-        for (c = fgetc(stdin); c != EOF && c != '\n'; c = fgetc(stdin)) ;
-        if (c == EOF)  exit(feof(stdin) ? 0 : 1);
-
-        // Mark exception as having been handled
-        exception = 0;
-    }
-
     // QUIT jumps to here
     if (setjmp(warm_boot) != 0) {
         // If we get here via QUIT, discard the rest of the current input line
@@ -93,6 +67,35 @@ int main (int argc, char **argv) {
 
     error_state = E_OK;
     memset(error_message, 0, sizeof(error_message));
+
+    // Set up a default exception handler
+    exception_init();
+    if ((exception_frame = exception_next_frame()) == NULL) {
+        fprintf(stderr, "failed to install default exception handler\n");
+        longjmp(cold_boot, -1);  // FIXME do it right
+    }
+
+    exception_frame->ds_top = exception_frame->rs_top = exception_frame->cs_top = STACK_EMPTY;
+    if ((exception = setjmp(exception_frame->target)) != 0) {
+        // Exception occurred
+        register int c;
+        fprintf(stderr, "Unhandled exception %i\n", exception);
+
+        // FIXME if it's an "abort" exception, then do ABORT
+
+        // Reset stacks
+        data_stack.top = exception_frame->ds_top;
+        return_stack.top = exception_frame->rs_top;
+        control_stack.top = exception_frame->cs_top;
+
+        // Discard rest of current input line
+        // FIXME if the last char parsed was actually EOL this discards the NEXT line
+        for (c = fgetc(stdin); c != EOF && c != '\n'; c = fgetc(stdin)) ;
+        if (c == EOF)  exit(feof(stdin) ? 0 : 1);
+
+        // Mark exception as having been handled
+        exception = 0;
+    }
 
     // Run the interpreter
     while (1) {

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "exception.h"
 #include "forth.h"
 #include "stack.h"
 
@@ -105,7 +106,48 @@ static inline void do_execute (const pvf *xt) {
     }
     else {
         fprintf(stderr, "Invalid execution token: %p\n", xt);
+        // FIXME throw something here
     }
+}
+
+
+static inline void do_catch (const pvf *xt) {
+    int exception;
+    ExceptionFrame *frame;
+
+    if ((frame = exception_next_frame()) == NULL) {
+        // Throw exception stack overflow exception
+        fprintf(stderr, "Catch %p overflows exception stack\n", (void*) xt);
+        DPUSH((cell)(intptr_t) EXC_EXOVER);
+        _THROW(NULL);
+    }
+
+    frame->ds_top = data_stack.top;
+    frame->rs_top = return_stack.top;
+    frame->cs_top = control_stack.top;
+
+    if ((exception = setjmp(frame->target)) == 0) {
+        fprintf(stderr, "Executing xt %p with exception handler\n", (void*) xt); 
+
+        do_execute(xt);
+
+        // EXECUTE ran successfully, push a 0
+        DPUSH((cell)(intptr_t) 0);
+    }
+    else {
+        // Exception occurred
+        fprintf (stderr, "Caught exception %i while executing %p\n", exception, xt);
+
+        // Reset stacks
+        data_stack.top = frame->ds_top;
+        return_stack.top = frame->rs_top;
+        control_stack.top = frame->cs_top;
+
+        // Push the exception value
+        DPUSH((cell)(intptr_t) exception);
+    }
+
+    exception_pop_frame();
 }
 
 
@@ -162,11 +204,13 @@ void do_interpret (void *pfa) {
         }
         else if (a.as_i == word->length) {
             // Couldn't parse any digits
-            error_state = E_PARSE;
-            snprintf(error_message, MAX_ERROR_LEN, 
-                "unrecognised word '%.*s'", word->length, word->value);
-            DPOP(a);  // discard junk value
-            _QUIT(NULL);
+//            error_state = E_PARSE;
+//            snprintf(error_message, MAX_ERROR_LEN, 
+//                "unrecognised word '%.*s'", word->length, word->value);
+//            DPOP(a);  // discard junk value
+//            _QUIT(NULL);
+           DPUSH((cell)(intptr_t) EXC_UNDEF);
+           _THROW(NULL);
         }
         else if (a.as_i > 0) {
             // Parsed some digits, but not all
@@ -1151,6 +1195,7 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     if (var_BASE->as_i != 0 && (var_BASE->as_i < 2 || var_BASE->as_i > 36)) {
         fprintf(stderr, "BASE %"PRIiPTR" is out of range\n", var_BASE->as_i);
         _QUIT(NULL);
+        // FIXME throw
     }
 
     DPOP(a);
@@ -1167,12 +1212,12 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
         }
         else {
             // Some other error occurred
-            perror("NUMBER");   // FIXME do this differently?
+            perror("NUMBER");   // FIXME throw
             _QUIT(NULL);
         }
     }
     else {
-        // FIXME error and _QUIT
+        // FIXME throw
         DPUSH((cell)(intptr_t) 0);   // value
         DPUSH((cell)(intptr_t) -1);  // negative status means parse failed
     }
@@ -1606,47 +1651,11 @@ PRIMITIVE ("THROW", 0, _THROW, _POSTPONE) {
 
 // ( xt -- status )
 PRIMITIVE ("CATCH", 0, _CATCH, _THROW) {
-    ExceptionFrame *frame;
-    int exception;
     REG(xt);
 
     DPOP(xt);
 
-    if ((frame = exception_next_frame()) != NULL) {
-        frame->ds_top = data_stack.top;
-        frame->rs_top = return_stack.top;
-        frame->cs_top = control_stack.top;
-
-        if ((exception = setjmp(frame->target)) != 0) {
-            // Exception occurred
-            fprintf (stderr, "Caught exception %i while executing %"PRIuPTR"\n", 
-                exception, xt.as_u);
-
-            // Reset stacks
-            data_stack.top = frame->ds_top;
-            return_stack.top = frame->rs_top;
-            control_stack.top = frame->cs_top;
-
-            // Push the exception value
-            DPUSH((cell)(intptr_t) exception);
-        }
-        else {
-            fprintf(stderr, "Executing xt %"PRIuPTR" with exception handler\n", xt.as_u); 
-
-            do_execute(xt.as_xt);
-
-            // EXECUTE ran successfully, push a 0
-            DPUSH((cell)(intptr_t) 0);
-        }
-
-        exception_pop_frame();
-    }
-    else {
-        // Throw exception stack overflow exception
-        fprintf(stderr, "Catch %"PRIuPTR" overflows exception stack\n", xt.as_u);
-        DPUSH((cell)(intptr_t) EXC_EXOVER);
-        _THROW(NULL);
-    }
+    do_catch(xt.as_xt);
 }
 
 

@@ -14,6 +14,7 @@
 * fix NUMBER (again) to deal with errno, endptr, etc sanely. eg 0 chars parsed means it's not a 
   number at all, so simply tell the caller as much
 * add ['], FORGET
+* move the do_foo() functions into vm.c so that builtin.c is only actual forth functions
 
 
 
