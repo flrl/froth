@@ -12,7 +12,7 @@
 // FIXME I think I may be able to make primitives no longer take a param
 
 // Function signature for a primitive
-#define DECLARE_PRIMITIVE(P)    void P (void *pfa)
+#define DECLARE_PRIMITIVE(P)    void P()
 
 // Define a primitive and add it to the dictionary
 #define PRIMITIVE(NAME, FLAGS, CNAME, LINK)                                         \

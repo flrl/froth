@@ -4,9 +4,10 @@
 
 #include "exception.h"
 #include "vm.h"
+#include "builtin.h"
 
 // Pre-declare a few things
-DictEntry _dict__LIT;
+extern DictEntry _dict__LIT;
 
 /*
  *  +------+-----+------+------+-------+-------+-----+

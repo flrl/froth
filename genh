@@ -19,7 +19,7 @@ PREAMBLE
 
 while (<>) {
     if (m/^\s*PRIMITIVE\s*\(\"[^"]+\",\s*[^,]+,\s*([^,]+),\s*[^,]+\s*\)\s*\{/) {
-        print "void $1 (void *);\n";
+        print "void $1 ();\n";
     }
     elsif (m/^\s*VARIABLE\s*\(([^,]+),\s*[^,]+,\s*[^,]+,\s*[^,]+\s*\)\s*;/) {
         print "extern cell * const var_$1;\n";
@@ -28,7 +28,7 @@ while (<>) {
         print "extern const cell * const const_$1;\n";
     }
     elsif (m/^\s*READONLY\s*\(([^,]+),\s*[^,]+,\s*[^,]+,\s*[^,]+\s*\)\s*;/) {
-        print "void readonly_$1 (void *);\n";
+        print "void readonly_$1 ();\n";
     }
 }
 
