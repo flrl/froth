@@ -11,10 +11,8 @@
 * add a number-of-cells field to dictentry and hook everything up to know about it.
 * actually hook up the memory stuff. this is going to require shifting to a function lookup table
   approach, because all of the user-defined xt's will change if the realloc moves the memory area.
-* fix NUMBER (again) to deal with errno, endptr, etc sanely. eg 0 chars parsed means it's not a 
-  number at all, so simply tell the caller as much
-* add ['], FORGET
-* move the do_foo() functions into vm.c so that builtin.c is only actual forth functions
+    * actually nuke it
+* add FORGET
 
 
 

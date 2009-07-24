@@ -844,6 +844,7 @@ PRIMITIVE ("ASSERT", 0, _ASSERT, _2CTRLat) {
                         "(expected %"PRIuPTR", found %"PRIuPTR")\n",
                         2 * n, stack_count(&data_stack));
         _ABORT(NULL);
+        // FIXME throw
     }
 }
 
@@ -872,7 +873,8 @@ PRIMITIVE ("KEY", 0, _KEY, _dotS) {
     REG(a);
 
     /* stdio is line buffered when attached to terminals :) */
-    if ((a.as_i = fgetc(stdin)) != EOF) {
+    a = getkey();
+    if (a.as_i != EOF) {
         DPUSH(a);
 //        if (a == '\n')  puts(" ok");
     }
@@ -932,7 +934,8 @@ PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
         // Ran out of room, return some kind of error
         // Don't flip the buffers
         // FIXME anything else?
-        DPUSH((cell)(intptr_t) 0);
+        DPUSH((cell)(intptr_t) EXC_STR_OVER);
+        _THROW();  /* doesn't return */
     }
 }
 
@@ -945,33 +948,32 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 
     // Eliminate invalid base early
     if (var_BASE->as_i != 0 && (var_BASE->as_i < 2 || var_BASE->as_i > 36)) {
-        fprintf(stderr, "BASE %"PRIiPTR" is out of range\n", var_BASE->as_i);
-        _QUIT(NULL);
-        // FIXME throw
+        DPUSH((cell)(intptr_t) EXC_INV_NUM);
+        _THROW();  /* doesn't return */
     }
 
     DPOP(a);
     word = a.as_cs;
 
-    if (word && word->length > 0) {
-        errno = 0;
-        a.as_u = strtoul(word->value, &endptr, var_BASE->as_i);
-        if (errno == 0 || errno == EINVAL) {
-            // Now if it's EINVAL it just means it wasn't a number or had trailing junk
-            DPUSH(a);   // value
-            a.as_i = word->value + word->length - endptr;
-            DPUSH(a);   // number of chars left unparsed
-        }
-        else {
-            // Some other error occurred
-            perror("NUMBER");   // FIXME throw
-            _QUIT(NULL);
-        }
+    // Bail out if the word is junk
+    if (word == NULL || word->length <= 0) {
+        DPUSH((cell)(intptr_t) EXC_INV_ADDR);
+        _THROW();  /* doesn't return */
+    }
+
+    errno = 0;
+    a.as_u = strtoul(word->value, &endptr, var_BASE->as_i);
+    if (errno == 0 || errno == EINVAL) {
+        // Now if it's EINVAL it just means it wasn't a number or had trailing junk
+        DPUSH(a);   // value
+        a.as_i = word->value + word->length - endptr;
+        DPUSH(a);   // number of chars left unparsed
     }
     else {
-        // FIXME throw
-        DPUSH((cell)(intptr_t) 0);   // value
-        DPUSH((cell)(intptr_t) -1);  // negative status means parse failed
+        // Some other error occurred
+        perror("NUMBER");   // FIXME 
+        DPUSH((cell)(intptr_t) 12); // FIXME magic number
+        _THROW();
     }
 }
 
@@ -1119,6 +1121,15 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     DPOP(a);
     name = a.as_cs;
 
+    if (name->length <= 0) {
+        DPUSH((cell)(intptr_t) EXC_EMPTY_NAME);
+        _THROW();  /* doesn't return */
+    }
+    else if (name->length > MAX_WORD_LEN) {
+        DPUSH((cell)(intptr_t) EXC_NAMELEN);
+        _THROW();  /* doesn't return */
+    }
+
     // Initialise a DictHeader for it
     a.as_u = CELLALIGN(var_HERE->as_u);
     new_header = (DictHeader *) a.as_ptr;
@@ -1145,7 +1156,6 @@ PRIMITIVE (",", 0, _comma, _CREATE) {
     DPOP(a);
     **(cell**)var_HERE = a;
     var_HERE->as_ptr += sizeof(cell);
-    // FIXME is this right?
 }
 
 

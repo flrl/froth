@@ -6,6 +6,9 @@
 #include "vm.h"
 #include "builtin.h"
 
+
+static cell last_key;
+
 // Pre-declare a few things
 extern DictEntry _dict__LIT;
 
@@ -120,28 +123,15 @@ void do_interpret (void *pfa) {
         }
         else if (a.as_i == word->length) {
             // Couldn't parse any digits
-//            error_state = E_PARSE;
-//            snprintf(error_message, MAX_ERROR_LEN, 
-//                "unrecognised word '%.*s'", word->length, word->value);
-//            DPOP(a);  // discard junk value
-//            _QUIT(NULL);
            DPUSH((cell)(intptr_t) EXC_UNDEF);
-           _THROW(NULL);
+           _THROW(NULL);  /* doesn't return */
         }
-        else if (a.as_i > 0) {
+        else {
             // Parsed some digits, but not all
             error_state = E_PARSE;
             snprintf(error_message, MAX_ERROR_LEN,
                 "ignored trailing junk following number '%.*s'", word->length, word->value);
             _QUIT(NULL);  // FIXME rly?
-        }
-        else {
-            // NUMBER failed
-            error_state = E_PARSE;
-            snprintf(error_message, MAX_ERROR_LEN,
-                "couldn't parse number (NUMBER returned %"PRIiPTR")\n", a.as_i);
-            DPOP(a);  // discard junk value
-            _QUIT(NULL);
         }
     }
 }
@@ -211,3 +201,12 @@ void do_value (void *pfa) {
 }
 
 
+
+cell getkey() {
+    last_key.as_i = fgetc(stdin);
+    return last_key;
+}
+
+cell lastkey() {
+    return last_key;
+}

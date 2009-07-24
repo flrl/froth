@@ -1,6 +1,7 @@
 #ifndef _FORTH_H
 #define _FORTH_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <setjmp.h>
 

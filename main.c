@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "vm.h"
 #include "forth.h"
 #include "stack.h"
 
@@ -33,10 +34,10 @@ int main (int argc, char **argv) {
     // FIXME how does this interact with exceptions?
     if (setjmp(cold_boot) != 0) {
         // If we get here via ABORT, discard the rest of the current input line
-        register int c;
+        register cell c;
         // FIXME if the last char parsed was actually EOL this discards the NEXT line
-        for (c = fgetc(stdin); c != EOF && c != '\n'; c = fgetc(stdin)) ;
-        if (c == EOF)  exit(feof(stdin) ? 0 : 1);
+        for (c = lastkey(); c.as_i != EOF && c.as_i != '\n'; c = getkey()) ;
+        if (c.as_i == EOF)  exit(feof(stdin) ? 0 : 1);
     }
 
     interpreter_state = S_INTERPRET;
@@ -49,10 +50,10 @@ int main (int argc, char **argv) {
     // QUIT jumps to here
     if (setjmp(warm_boot) != 0) {
         // If we get here via QUIT, discard the rest of the current input line
-        register int c;
+        register cell c;
         // FIXME if the last char parsed was actually EOL this discards the NEXT line
-        for (c = fgetc(stdin); c != EOF && c != '\n'; c = fgetc(stdin)) ;
-        if (c == EOF)  exit(feof(stdin) ? 0 : 1);
+        for (c = lastkey(); c.as_i != EOF && c.as_i != '\n'; c = getkey()) ;
+        if (c.as_i == EOF)  exit(feof(stdin) ? 0 : 1);
     }
     stack_init(&return_stack);
     stack_init(&control_stack); // FIXME here?
@@ -78,7 +79,7 @@ int main (int argc, char **argv) {
     exception_frame->ds_top = exception_frame->rs_top = exception_frame->cs_top = STACK_EMPTY;
     if ((exception = setjmp(exception_frame->target)) != 0) {
         // Exception occurred
-        register int c;
+        register cell c;
         fprintf(stderr, "Unhandled exception %i\n", exception);
 
         // FIXME if it's an "abort" exception, then do ABORT
@@ -90,8 +91,8 @@ int main (int argc, char **argv) {
 
         // Discard rest of current input line
         // FIXME if the last char parsed was actually EOL this discards the NEXT line
-        for (c = fgetc(stdin); c != EOF && c != '\n'; c = fgetc(stdin)) ;
-        if (c == EOF)  exit(feof(stdin) ? 0 : 1);
+        for (c = lastkey(); c.as_i != EOF && c.as_i != '\n'; c = getkey()) ;
+        if (c.as_i == EOF)  exit(feof(stdin) ? 0 : 1);
 
         // Mark exception as having been handled
         exception = 0;

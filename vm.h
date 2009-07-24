@@ -21,6 +21,8 @@ void do_constant (void *);
 void do_variable (void *);
 void do_value (void *);
 
+cell getkey();
+cell lastkey();
 
 // Data stack macros
 #define DPEEK(X)        X = stack_peek(&data_stack)
