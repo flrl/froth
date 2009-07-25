@@ -1304,14 +1304,14 @@ PRIMITIVE ("USHRINK", 0, _USHRINK, _UGROWN) {
 
 // ( -- )
 PRIMITIVE ("QUIT", 0, _QUIT, _USHRINK) {
-    longjmp(warm_boot, 1);
+    do_quit();
 }
 
 
 // ( -- )
 PRIMITIVE ("ABORT", 0, _ABORT, _QUIT) {
-    fprintf(stderr, "Abort called, rebooting\n");
-    longjmp(cold_boot, 1);
+    fprintf(stderr, "ABORT called, rebooting\n");
+    do_abort();
 }
 
 
@@ -1395,19 +1395,9 @@ PRIMITIVE ("POSTPONE", F_IMMED | F_COMPONLY, _POSTPONE, _EXECUTE) {
 PRIMITIVE ("THROW", 0, _THROW, _POSTPONE) {
     REG(a);
 
-    DPOP(a); // FIXME this is itself vulnerable to stack underrun
-    if (a.as_i != 0) {
-        ExceptionFrame *frame = exception_current_frame();
-        if (frame) {
-            fprintf(stderr, "throwing %"PRIiPTR"\n", a.as_i);
-            longjmp(frame->target, a.as_i);
-        }
-        else {
-            // nothing on exception stack, ABORT
-            fprintf(stderr, "Attempt to throw with empty exception stack, ABORTing\n");
-            _ABORT(NULL);
-        }
-    }
+    DPOP(a); 
+
+    do_throw(a);
 }
 
 

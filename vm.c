@@ -1,16 +1,11 @@
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "exception.h"
 #include "vm.h"
 #include "builtin.h"
-
-
-static cell last_key;
-
-// Pre-declare a few things
-extern DictEntry _dict__LIT;
 
 /*
  *  +------+-----+------+------+-------+-------+-----+
@@ -30,6 +25,14 @@ extern DictEntry _dict__LIT;
  *                                                 \-> (etc)
  */
 
+jmp_buf abort_jmp;
+jmp_buf quit_jmp;
+
+static cell last_key;
+
+extern DictEntry _dict__LIT;  /* from builtin.c */
+
+
 void do_catch (const pvf *xt) {
     int exception;
     ExceptionFrame *frame;
@@ -48,7 +51,8 @@ void do_catch (const pvf *xt) {
     if ((exception = setjmp(frame->target)) == 0) {
         fprintf(stderr, "Executing xt %p with exception handler\n", (void*) xt); 
 
-        do_execute(xt);
+        do_execute(xt);  /* doesn't return if an exception occurs */
+        exception_drop_frame();
 
         // EXECUTE ran successfully, push a 0
         DPUSH((cell)(intptr_t) 0);
@@ -65,8 +69,29 @@ void do_catch (const pvf *xt) {
         // Push the exception value
         DPUSH((cell)(intptr_t) exception);
     }
+}
 
-    exception_pop_frame();
+
+void do_throw (cell exception) {
+    ExceptionFrame *frame;
+
+    switch(exception.as_i) {
+    case EXC_ABORT:
+        do_abort();  /* doesn't return */
+    case EXC_QUIT:
+        do_quit();  /* doesn't return */
+    default:
+        frame = exception_pop_frame();
+        if (frame) {
+            fprintf(stderr, "throwing %"PRIiPTR"\n", exception.as_i);
+            longjmp(frame->target, exception.as_i);
+        }
+        else {
+            // nothing on exception stack, ABORT
+            fprintf(stderr, "Unhandled exception: %"PRIiPTR"\n", exception.as_i);
+            do_abort();  /* doesn't return */
+        }
+    }
 }
 
 
@@ -209,4 +234,10 @@ cell getkey() {
 
 cell lastkey() {
     return last_key;
+}
+
+void dropline() {
+    register cell c;
+    for (c = lastkey(); c.as_i != EOF && c.as_i != '\n'; c = getkey()) ;
+    if (c.as_i == EOF)  exit(feof(stdin) ? 0 : 1);
 }

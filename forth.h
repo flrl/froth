@@ -109,8 +109,6 @@ extern DocolonMode docolon_mode;
 extern Error error_state;
 extern char  error_message[];
 
-extern jmp_buf cold_boot; //?
-extern jmp_buf warm_boot; //?
 extern ExceptionFrame exception_frame;
 
 extern void do_interpret (void*);

@@ -31,6 +31,9 @@ void exception_drop_frame();
 
 
 enum {
+    EXC_CS_UNDER = -4096,
+    EXC_CS_OVER,
+
     EXC_COND  = -58,
     EXC_CHARIO,
     EXC_QUIT,
