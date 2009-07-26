@@ -4,26 +4,20 @@
   words like IF etc that are meaningless in interpreted mode and possibly have edge cases.
   then make do_colon check the flag before trying to run them and if they shouldn't be run
   then just no-op (and maybe print a warning)  <- sorta done, but needs more thought
+    * think about this more and if it's done right, remove this point
 * maybe add another flag to say "is only available in interpret state" etc
 * maybe add another flag to say "can't be postponed or [compiled]" ala TO
-* debug primitives -- WORDS, DUMP, etc
+* debug primitives -- WORDS, DUMP, { => }, etc
 * proper test suite built around ASSERT
 * add a number-of-cells field to dictentry and hook everything up to know about it.
 * actually hook up the memory stuff. this is going to require shifting to a function lookup table
   approach, because all of the user-defined xt's will change if the realloc moves the memory area.
     * actually nuke it
 * add FORGET
+* merge main.c and vm.c
 
 
 
-
-add error states for stack underflow and stack overflow, and make the stack_* functions fire
-them off -- or make them call abort? think about this
-ok how about:
-    when parameter stack overflows or underflows:
-    1. reinitialise parameter stack to empty
-    2. set error state and error message to something sensible
-    3. call QUIT
 
 
 

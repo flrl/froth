@@ -33,7 +33,7 @@ static cell last_key;
 extern DictEntry _dict__LIT;  /* from builtin.c */
 
 
-void do_catch (const pvf *xt) {
+void catch (const pvf *xt) {
     int exception;
     ExceptionFrame *frame;
 
@@ -51,7 +51,7 @@ void do_catch (const pvf *xt) {
     if ((exception = setjmp(frame->target)) == 0) {
         fprintf(stderr, "Executing xt %p with exception handler\n", (void*) xt); 
 
-        do_execute(xt);  /* doesn't return if an exception occurs */
+        execute(xt);  /* doesn't return if an exception occurs */
         exception_drop_frame();
 
         // EXECUTE ran successfully, push a 0
@@ -72,14 +72,14 @@ void do_catch (const pvf *xt) {
 }
 
 
-void do_throw (cell exception) {
+void throw (cell exception) {
     ExceptionFrame *frame;
 
     switch(exception.as_i) {
     case EXC_ABORT:
-        do_abort();  /* doesn't return */
+        vm_abort();  /* doesn't return */
     case EXC_QUIT:
-        do_quit();  /* doesn't return */
+        vm_quit();  /* doesn't return */
     default:
         frame = exception_pop_frame();
         if (frame) {
@@ -89,7 +89,7 @@ void do_throw (cell exception) {
         else {
             // nothing on exception stack, ABORT
             fprintf(stderr, "Unhandled exception: %"PRIiPTR"\n", exception.as_i);
-            do_abort();  /* doesn't return */
+            vm_abort();  /* doesn't return */
         }
     }
 }
@@ -127,7 +127,7 @@ void do_interpret (void *pfa) {
             DPUSH(a);
             _DEtoCFA(NULL);
             DPOP(a);
-            do_execute(a.as_xt); 
+            execute(a.as_xt); 
         }
     }
     else {
@@ -175,11 +175,11 @@ void do_colon (void *pfa) {
     for (int i = 0; docolon_mode != DM_NORMAL || param[i].as_xt != 0; i++) {
         switch (docolon_mode) {
             case DM_SKIP:
-                // do nothing
+                /* do nothing */
                 docolon_mode = DM_NORMAL;
                 break;
             case DM_NORMAL:
-                do_execute(param[i].as_xt);
+                execute(param[i].as_xt);
                 break;
             case DM_BRANCH:
                 a = param[i];       // param is an offset to branch to

@@ -5,7 +5,7 @@
 #include "forth.h"
 #include "stack.h"
 
-DictDebug junk;  // Make sure DictDebug symbol gets compiled in
+DictDebug junk;  // Make sure DictDebug symbol does not optimise out
 
 Stack               data_stack;
 Stack               return_stack;
@@ -20,13 +20,9 @@ char                error_message[MAX_ERROR_LEN];
 jmp_buf             cold_boot;
 jmp_buf             warm_boot;
 
-extern DictEntry _dict_var_LATEST;  // This is "private" to builtin.c, but needed here to reinit
-
 int main (int argc, char **argv) {
 
     mem_init(0);
-    var_BASE->as_i = 0;
-    var_LATEST->as_de = &_dict_var_LATEST;
 
     // do_abort jumps to here
     if (setjmp(abort_jmp) != 0) {

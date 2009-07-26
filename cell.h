@@ -6,7 +6,7 @@
 struct _dict_entry;
 struct _counted_string;
 
-typedef void (*pvf)();
+typedef void (*pvf)(void *);
 
 typedef union _cell {
     intptr_t    as_i;
@@ -18,5 +18,7 @@ typedef union _cell {
     void        *as_ptr;   
     struct _counted_string *as_cs;
 } cell;
+
+#define CELL(X)  ((cell)(intptr_t) (X))
 
 #endif

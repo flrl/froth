@@ -9,10 +9,8 @@
 #include "stack.h"
 #include "vm.h"
 
-// FIXME I think I may be able to make primitives no longer take a param
-
 // Function signature for a primitive
-#define DECLARE_PRIMITIVE(P)    void P()
+#define DECLARE_PRIMITIVE(P)    void P(void *pfa)
 
 // Define a primitive and add it to the dictionary
 #define PRIMITIVE(NAME, FLAGS, CNAME, LINK)                                         \
@@ -931,11 +929,9 @@ PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
         usebuf = (usebuf == 0 ? 1 : 0);
     }
     else {
-        // Ran out of room, return some kind of error
+        // Ran out of room
         // Don't flip the buffers
-        // FIXME anything else?
-        DPUSH((cell)(intptr_t) EXC_STR_OVER);
-        _THROW();  /* doesn't return */
+        throw(CELL(EXC_STR_OVER));  /* doesn't return */
     }
 }
 
@@ -948,8 +944,7 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 
     // Eliminate invalid base early
     if (var_BASE->as_i != 0 && (var_BASE->as_i < 2 || var_BASE->as_i > 36)) {
-        DPUSH((cell)(intptr_t) EXC_INV_NUM);
-        _THROW();  /* doesn't return */
+        throw(CELL(EXC_INV_NUM));  /* doesn't return */
     }
 
     DPOP(a);
@@ -957,8 +952,7 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 
     // Bail out if the word is junk
     if (word == NULL || word->length <= 0) {
-        DPUSH((cell)(intptr_t) EXC_INV_ADDR);
-        _THROW();  /* doesn't return */
+        throw(CELL(EXC_INV_ADDR));  /* doesn't return */
     }
 
     errno = 0;
@@ -972,8 +966,7 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     else {
         // Some other error occurred
         perror("NUMBER");   // FIXME 
-        DPUSH((cell)(intptr_t) 12); // FIXME magic number
-        _THROW();
+        throw(CELL(12));  /* doesn't return */ // FIXME magic number
     }
 }
 
@@ -1122,12 +1115,10 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     name = a.as_cs;
 
     if (name->length <= 0) {
-        DPUSH((cell)(intptr_t) EXC_EMPTY_NAME);
-        _THROW();  /* doesn't return */
+        throw(CELL(EXC_EMPTY_NAME)); /* doesn't return */
     }
     else if (name->length > MAX_WORD_LEN) {
-        DPUSH((cell)(intptr_t) EXC_NAMELEN);
-        _THROW();  /* doesn't return */
+        throw(CELL(EXC_NAMELEN));  /* doesn't return */
     }
 
     // Initialise a DictHeader for it
@@ -1304,14 +1295,14 @@ PRIMITIVE ("USHRINK", 0, _USHRINK, _UGROWN) {
 
 // ( -- )
 PRIMITIVE ("QUIT", 0, _QUIT, _USHRINK) {
-    do_quit();
+    vm_quit();
 }
 
 
 // ( -- )
 PRIMITIVE ("ABORT", 0, _ABORT, _QUIT) {
     fprintf(stderr, "ABORT called, rebooting\n");
-    do_abort();
+    vm_abort();
 }
 
 
@@ -1351,7 +1342,7 @@ PRIMITIVE ("EXECUTE", 0, _EXECUTE, _divCELLS) {
     REG(xt);
 
     DPOP(xt);
-    do_execute(xt.as_xt);
+    execute(xt.as_xt);
 }
 
 
@@ -1397,7 +1388,7 @@ PRIMITIVE ("THROW", 0, _THROW, _POSTPONE) {
 
     DPOP(a); 
 
-    do_throw(a);
+    throw(a);
 }
 
 
@@ -1407,7 +1398,7 @@ PRIMITIVE ("CATCH", 0, _CATCH, _THROW) {
 
     DPOP(xt);
 
-    do_catch(xt.as_xt);
+    catch(xt.as_xt);
 }
 
 
