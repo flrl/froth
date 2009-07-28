@@ -1,10 +1,5 @@
-* work out how to make a prompt work
+* implement proper input buffer/prompt
 * implement if/else/then to also work in interp mode -- see [IF] etc in spec
-* maybe add another flag to say "is only available in compilation state" and add it to such
-  words like IF etc that are meaningless in interpreted mode and possibly have edge cases.
-  then make do_colon check the flag before trying to run them and if they shouldn't be run
-  then just no-op (and maybe print a warning)  <- sorta done, but needs more thought
-    * think about this more and if it's done right, remove this point
 * maybe add another flag to say "is only available in interpret state" etc
 * maybe add another flag to say "can't be postponed or [compiled]" ala TO
 * debug primitives -- WORDS, DUMP, { => }, etc
@@ -15,7 +10,8 @@
     * actually nuke it
 * add FORGET
 * merge main.c and vm.c
-
+* tidy a bunch of the headers into a types.h for less #include drama
+* EVALUATE/QUIT -- can also use this mechanism for file i/o, #include-ish stuff, etc, i think
 
 
 

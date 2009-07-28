@@ -11,9 +11,6 @@ Stack               data_stack;
 Stack               return_stack;
 Stack               control_stack;
 
-InterpreterState    interpreter_state;
-DocolonMode         docolon_mode;
-
 Error               error_state;
 char                error_message[MAX_ERROR_LEN];
 

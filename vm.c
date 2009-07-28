@@ -28,6 +28,9 @@
 jmp_buf abort_jmp;
 jmp_buf quit_jmp;
 
+InterpreterState    interpreter_state;
+DocolonMode         docolon_mode;
+
 static cell last_key;
 
 extern DictEntry _dict__LIT;  /* from builtin.c */
@@ -40,8 +43,7 @@ void catch (const pvf *xt) {
     if ((frame = exception_next_frame()) == NULL) {
         // Throw exception stack overflow exception
         fprintf(stderr, "Catch %p overflows exception stack\n", (void*) xt);
-        DPUSH((cell)(intptr_t) EXC_EXOVER);
-        _THROW(NULL);
+        throw(CELL(EXC_EXOVER));  /* doesn't return */
     }
 
     frame->ds_top = data_stack.top;
@@ -76,6 +78,8 @@ void throw (cell exception) {
     ExceptionFrame *frame;
 
     switch(exception.as_i) {
+    case EXC_OK:
+        return;
     case EXC_ABORT:
         vm_abort();  /* doesn't return */
     case EXC_QUIT:
@@ -148,8 +152,7 @@ void do_interpret (void *pfa) {
         }
         else if (a.as_i == word->length) {
             // Couldn't parse any digits
-           DPUSH((cell)(intptr_t) EXC_UNDEF);
-           _THROW(NULL);  /* doesn't return */
+           throw(CELL(EXC_UNDEF));  /* doesn't return */
         }
         else {
             // Parsed some digits, but not all
