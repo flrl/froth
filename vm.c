@@ -43,7 +43,7 @@ void catch (const pvf *xt) {
     if ((frame = exception_next_frame()) == NULL) {
         // Throw exception stack overflow exception
         fprintf(stderr, "Catch %p overflows exception stack\n", (void*) xt);
-        throw(CELL(EXC_EXOVER));  /* doesn't return */
+        throw(EXC_EXOVER);  /* doesn't return */
     }
 
     frame->ds_top = data_stack.top;
@@ -74,10 +74,10 @@ void catch (const pvf *xt) {
 }
 
 
-void throw (cell exception) {
+void throw (intptr_t exception) {
     ExceptionFrame *frame;
 
-    switch(exception.as_i) {
+    switch(exception) {
     case EXC_OK:
         return;
     case EXC_ABORT:
@@ -87,12 +87,12 @@ void throw (cell exception) {
     default:
         frame = exception_pop_frame();
         if (frame) {
-            fprintf(stderr, "throwing %"PRIiPTR"\n", exception.as_i);
-            longjmp(frame->target, exception.as_i);
+            fprintf(stderr, "throwing %"PRIiPTR"\n", exception);
+            longjmp(frame->target, exception);
         }
         else {
             // nothing on exception stack, ABORT
-            fprintf(stderr, "Unhandled exception: %"PRIiPTR"\n", exception.as_i);
+            fprintf(stderr, "Unhandled exception: %"PRIiPTR"\n", exception);
             vm_abort();  /* doesn't return */
         }
     }
@@ -150,16 +150,9 @@ void do_interpret (void *pfa) {
                 _comma(NULL);
             }
         }
-        else if (a.as_i == word->length) {
-            // Couldn't parse any digits
-           throw(CELL(EXC_UNDEF));  /* doesn't return */
-        }
         else {
-            // Parsed some digits, but not all
-            error_state = E_PARSE;
-            snprintf(error_message, MAX_ERROR_LEN,
-                "ignored trailing junk following number '%.*s'", word->length, word->value);
-            _QUIT(NULL);  // FIXME rly?
+            // Didn't parse a number cleanly
+            throw(EXC_UNDEF);  /* doesn't return */
         }
     }
 }

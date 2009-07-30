@@ -11,13 +11,13 @@
 #define STACK_EMPTY (-1)
 #endif
 
-extern void throw();
+extern void throw (intptr_t);
 
 typedef struct _stack {
     int32_t top;
     int underflow;
     int overflow;
-    #define STACK_SIZE (8)
+    #define STACK_SIZE (256)
     cell values[STACK_SIZE];
 } Stack;
 

@@ -1,6 +1,8 @@
 #ifndef _VM_H
 #define _VM_H
 
+#include <stdint.h>
+
 #include "forth.h"
 
 extern jmp_buf abort_jmp;
@@ -9,14 +11,14 @@ extern jmp_buf quit_jmp;
 static inline void execute (const pvf *xt) {
     const uint32_t *sentinel = CFA_to_SFA(xt);
     // FIXME if xt is out of our address range it can sigbus when we compare against SENTINEL
-    if (*sentinel == SENTINEL) {
+    if (xt != NULL && sentinel != NULL && *sentinel == SENTINEL) {
 //        This MUST pass an argument -- here we are calling do_colon or whatever, and passing
 //        in a pointer to the actual colon definition to run 
         (**xt)(CFA_to_DFA(xt));
     }
     else {
         fprintf(stderr, "Invalid execution token: %p\n", xt);
-        // FIXME throw something here
+        throw(EXC_INV_ADDR);
     }
 }
 
@@ -31,7 +33,7 @@ static inline void vm_abort() {
 }
 
 void catch (const pvf *);
-void throw (cell exception); 
+void throw (intptr_t exception); 
 void do_interpret (void *);
 void do_colon (void *);
 void do_constant (void *);

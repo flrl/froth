@@ -95,19 +95,12 @@ typedef enum {
     DM_SLITERAL = 3,
 } DocolonMode;
 
-typedef enum {
-    E_OK = 0,
-    E_PARSE = 1,
-} Error;
-
 extern Stack    data_stack;
 extern Stack    return_stack;
 extern Stack    control_stack;
 
 extern InterpreterState interpreter_state;
 extern DocolonMode docolon_mode;
-extern Error error_state;
-extern char  error_message[];
 
 extern void do_interpret (void*);
 

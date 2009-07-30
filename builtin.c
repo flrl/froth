@@ -931,7 +931,7 @@ PRIMITIVE ("WORD", 0, _WORD, _EMIT) {
     else {
         // Ran out of room
         // Don't flip the buffers
-        throw(CELL(EXC_STR_OVER));  /* doesn't return */
+        throw(EXC_STR_OVER);  /* doesn't return */
     }
 }
 
@@ -944,7 +944,7 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 
     // Eliminate invalid base early
     if (var_BASE->as_i != 0 && (var_BASE->as_i < 2 || var_BASE->as_i > 36)) {
-        throw(CELL(EXC_INV_NUM));  /* doesn't return */
+        throw(EXC_INV_NUM);  /* doesn't return */
     }
 
     DPOP(a);
@@ -952,7 +952,7 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
 
     // Bail out if the word is junk
     if (word == NULL || word->length <= 0) {
-        throw(CELL(EXC_INV_ADDR));  /* doesn't return */
+        throw(EXC_INV_ADDR);  /* doesn't return */
     }
 
     errno = 0;
@@ -966,7 +966,7 @@ PRIMITIVE ("NUMBER", 0, _NUMBER, _WORD) {
     else {
         // Some other error occurred
         perror("NUMBER");   // FIXME 
-        throw(CELL(12));  /* doesn't return */ // FIXME magic number
+        throw(12);  /* doesn't return */ // FIXME magic number
     }
 }
 
@@ -1115,10 +1115,10 @@ PRIMITIVE ("CREATE", 0, _CREATE, _LIT) {
     name = a.as_cs;
 
     if (name->length <= 0) {
-        throw(CELL(EXC_EMPTY_NAME)); /* doesn't return */
+        throw(EXC_EMPTY_NAME); /* doesn't return */
     }
     else if (name->length > MAX_WORD_LEN) {
-        throw(CELL(EXC_NAMELEN));  /* doesn't return */
+        throw(EXC_NAMELEN);  /* doesn't return */
     }
 
     // Initialise a DictHeader for it
@@ -1384,11 +1384,11 @@ PRIMITIVE ("POSTPONE", F_IMMED | F_COMPONLY, _POSTPONE, _EXECUTE) {
 
 // ( n -- )
 PRIMITIVE ("THROW", 0, _THROW, _POSTPONE) {
-    REG(a);
+    REG(n);
 
-    DPOP(a); 
+    DPOP(n); 
 
-    throw(a);
+    throw(n.as_i);
 }
 
 
