@@ -23,12 +23,12 @@ static inline void execute (const pvf *xt) {
 }
 
 static inline void vm_quit() {
-    fprintf(stderr, "do_quit called...\n");
+    fprintf(stderr, "vm_quit called...\n");
     longjmp(quit_jmp, 1);
 }
 
 static inline void vm_abort() {
-    fprintf(stderr, "do_abort called...\n");
+    fprintf(stderr, "vm_abort called...\n");
     longjmp(abort_jmp, -1);
 }
 
